@@ -83,7 +83,7 @@
   .mm { font-family: var(--font-num); font-size: 18px; color: var(--muted); font-variant-numeric: tabular-nums; }
   .mm b { color: var(--ink); font-weight: 600; }
 
-  .instrument {
+  .instrument, .panel {
     background: var(--surface);
     border-radius: 22px;
     box-shadow: var(--shadow);
@@ -91,6 +91,24 @@
     display: grid;
     gap: 18px;
   }
+  .panel { gap: 14px; }
+  .panel-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+  .panel h2 { margin: 0; font-size: 15px; font-weight: 700; }
+  .num-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+  .num-field { display: grid; gap: 6px; }
+  .num-field input, .text-input {
+    height: 42px; width: 100%; min-width: 0;
+    border: 1px solid var(--line); border-radius: 10px;
+    background: transparent;
+    padding: 0 12px;
+  }
+  .num-field input {
+    font-family: var(--font-num); font-size: 20px; font-weight: 600;
+    font-variant-numeric: tabular-nums;
+  }
+  .num-field input:disabled { opacity: .5; }
+  .status { margin: 0; font-size: 13px; color: var(--muted); min-height: 1.5em; }
+  .status b { color: var(--ink); font-weight: 700; font-variant-numeric: tabular-nums; }
 
   .pendulum { display: block; width: 100%; max-width: 260px; height: auto; margin: 0 auto; }
   .pendulum .scale { stroke: var(--line); stroke-width: 2; stroke-linecap: round; fill: none; }
@@ -284,6 +302,23 @@
     </div>
   </section>
 
+  <section class="panel" aria-labelledby="trainerTitle">
+    <div class="panel-head">
+      <h2 id="trainerTitle">스피드 트레이너</h2>
+      <button id="trainerToggle" class="toggle" type="button" aria-pressed="false" aria-labelledby="trainerTitle trainerLabel">
+        <span class="knob"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 2l5 6h-3v6H6V8H3z"></path></svg></span>
+        <span id="trainerLabel">꺼짐</span>
+      </button>
+    </div>
+    <div class="num-grid">
+      <label class="num-field"><span class="label">시작 BPM</span><input id="trStart" type="number" min="20" max="300" step="1" inputmode="numeric"></label>
+      <label class="num-field"><span class="label">목표 BPM</span><input id="trTarget" type="number" min="20" max="300" step="1" inputmode="numeric"></label>
+      <label class="num-field"><span class="label">한 번에 바꿀 BPM</span><input id="trStep" type="number" min="1" max="50" step="1" inputmode="numeric"></label>
+      <label class="num-field"><span class="label">몇 마디마다</span><input id="trBars" type="number" min="1" max="64" step="1" inputmode="numeric"></label>
+    </div>
+    <p class="status" id="trainerStatus" aria-live="polite"></p>
+  </section>
+
   <p class="keys">
     <kbd>Space</kbd> 시작/정지 · <kbd>T</kbd> 탭 템포 · <kbd>↑</kbd><kbd>↓</kbd> ±1 · <kbd>Shift</kbd>+<kbd>↑</kbd><kbd>↓</kbd> ±5
   </p>
@@ -324,13 +359,26 @@
     beats: $("beats"), play: $("play"), playLabel: $("playLabel"), playIcon: $("playIcon"),
     tap: $("tap"), tapHint: $("tapHint"), meters: $("meters"),
     subdivs: $("subdivs"), subNote: $("subNote"),
+    trToggle: $("trainerToggle"), trLabel: $("trainerLabel"), trStatus: $("trainerStatus"),
+    trStart: $("trStart"), trTarget: $("trTarget"), trStep: $("trStep"), trBars: $("trBars"),
     sound: $("sound"), soundLabel: $("soundLabel"), volume: $("volume"),
     arm: $("arm"), weight: $("weight"), ticks: $("ticks")
   };
 
-  const state = { bpm: 120, meter: 2, subdiv: 1, sound: true, volume: 80 };
+  const TRAINER_LIMITS = { start: [MIN_BPM, MAX_BPM], target: [MIN_BPM, MAX_BPM], step: [1, 50], bars: [1, 64] };
+  const state = {
+    bpm: 120, meter: 2, subdiv: 1, sound: true, volume: 80,
+    trainer: { on: false, start: 80, target: 120, step: 4, bars: 4 }
+  };
+  const clampInt = (v, [lo, hi]) => Math.min(hi, Math.max(lo, Math.round(v)));
   try {
     const saved = JSON.parse(localStorage.getItem(STORE_KEY) || "{}");
+    if (saved.trainer && typeof saved.trainer === "object") {
+      state.trainer.on = saved.trainer.on === true;
+      for (const k of Object.keys(TRAINER_LIMITS)) {
+        if (Number.isFinite(saved.trainer[k])) state.trainer[k] = clampInt(saved.trainer[k], TRAINER_LIMITS[k]);
+      }
+    }
     if (Number.isFinite(saved.bpm)) state.bpm = clampBpm(saved.bpm);
     if (Number.isInteger(saved.meter) && METERS[saved.meter]) state.meter = saved.meter;
     if (SUBDIVS.includes(saved.subdiv)) state.subdiv = saved.subdiv;
@@ -493,6 +541,7 @@
       if (subIdx === 0) {
         const n = METERS[state.meter].n;
         curBeat = beatIdx % n;
+        if (curBeat === 0 && seq > 0) onBarStart();
         curSub = state.subdiv;
         curBeatDur = 60 / state.bpm;
         if (state.sound) click(nextTime, curBeat === 0 && n > 1 ? "accent" : "beat");
@@ -544,6 +593,50 @@
     requestAnimationFrame(draw);
   }
 
+  // ---- Speed trainer ----
+  let barsDone = 0;
+  function onBarStart() {
+    const tr = state.trainer;
+    if (!tr.on) return;
+    barsDone++;
+    if (barsDone % tr.bars === 0 && state.bpm !== tr.target) {
+      const dir = Math.sign(tr.target - state.bpm);
+      const next = state.bpm + dir * tr.step;
+      setBpm(dir > 0 ? Math.min(next, tr.target) : Math.max(next, tr.target));
+    }
+    renderTrainerStatus();
+  }
+
+  function renderTrainerStatus() {
+    const tr = state.trainer;
+    el.trStatus.innerHTML = "";
+    const b = (text) => { const x = document.createElement("b"); x.textContent = text; return x; };
+    if (!tr.on) {
+      el.trStatus.append("켜면 시작 버튼을 누를 때마다 시작 BPM에서 다시 출발합니다.");
+      return;
+    }
+    const up = tr.target >= tr.start;
+    if (!playing) {
+      el.trStatus.append(b(`${tr.start}`), ` BPM에서 ${tr.bars}마디마다 ${tr.step} BPM씩 ${up ? "올려" : "내려"} `, b(`${tr.target}`), " BPM까지 갑니다.");
+    } else if (state.bpm === tr.target) {
+      el.trStatus.append("목표 ", b(`${tr.target}`), " BPM에 도달했습니다. 이 템포를 유지합니다.");
+    } else {
+      const left = tr.bars - (barsDone % tr.bars);
+      el.trStatus.append("지금 ", b(`${state.bpm}`), ` BPM · 목표 ${tr.target} · 다음 변경까지 `, b(`${left}`), "마디");
+    }
+  }
+
+  function renderTrainer() {
+    const tr = state.trainer;
+    el.trToggle.setAttribute("aria-pressed", String(tr.on));
+    el.trLabel.textContent = tr.on ? "켜짐" : "꺼짐";
+    el.trStart.value = tr.start;
+    el.trTarget.value = tr.target;
+    el.trStep.value = tr.step;
+    el.trBars.value = tr.bars;
+    renderTrainerStatus();
+  }
+
   async function start() {
     try {
       await ensureAudio();
@@ -551,6 +644,8 @@
       el.tapHint.textContent = "이 브라우저에서는 오디오를 시작할 수 없습니다.";
       return;
     }
+    barsDone = 0;
+    if (state.trainer.on) setBpm(state.trainer.start);
     playing = true;
     beatIdx = 0; subIdx = 0; seq = 0; current = null; queue.length = 0;
     nextTime = ctx.currentTime + 0.06;
@@ -558,6 +653,7 @@
     ticker.start();
     renderPlay();
     requestAnimationFrame(draw);
+    renderTrainerStatus();
   }
 
   function stop() {
@@ -568,6 +664,7 @@
     dots.forEach((d) => d.classList.remove("on"));
     setArm(0);
     renderPlay();
+    renderTrainerStatus();
   }
 
   function toggle() { playing ? stop() : start(); }
@@ -607,6 +704,21 @@
   el.tap.addEventListener("click", tap);
   el.sound.addEventListener("click", () => { state.sound = !state.sound; renderSound(); save(); });
   el.volume.addEventListener("input", () => { state.volume = Number(el.volume.value); applyVolume(); save(); });
+  el.trToggle.addEventListener("click", () => {
+    state.trainer.on = !state.trainer.on;
+    barsDone = 0;
+    renderTrainer();
+    save();
+  });
+  [["trStart", "start"], ["trTarget", "target"], ["trStep", "step"], ["trBars", "bars"]].forEach(([id, key]) => {
+    el[id].addEventListener("change", () => {
+      const v = Number(el[id].value);
+      if (Number.isFinite(v) && el[id].value !== "") state.trainer[key] = clampInt(v, TRAINER_LIMITS[key]);
+      renderTrainer();
+      save();
+    });
+    el[id].addEventListener("keydown", (e) => { if (e.key === "Enter") el[id].blur(); });
+  });
 
   document.addEventListener("keydown", (e) => {
     if (e.ctrlKey || e.metaKey || e.altKey) return;
@@ -623,6 +735,7 @@
   renderMeters();
   renderSubdivs();
   renderSound();
+  renderTrainer();
   renderPlay();
   setArm(0);
 })();
