@@ -19,6 +19,8 @@
     --on-accent: #FFFFFF;
     --beat-off: #D4D9E0;
     --beat-on: #33405A;
+    --danger: #B42318;
+    --on-danger: #FFFFFF;
     --shadow: 0 1px 2px rgba(20, 28, 40, .06), 0 10px 30px rgba(20, 28, 40, .08);
     --font-num: "Barlow Condensed", "Arial Narrow", "Roboto Condensed", sans-serif;
     --font-ui: "Noto Sans KR", "Malgun Gothic", "Apple SD Gothic Neo", system-ui, sans-serif;
@@ -36,6 +38,8 @@
       --on-accent: #1C1405;
       --beat-off: #2C323D;
       --beat-on: #C3CBD8;
+      --danger: #F2705F;
+      --on-danger: #1F0703;
       --shadow: 0 0 0 1px #232833;
     }
   }
@@ -51,6 +55,8 @@
     --on-accent: #1C1405;
     --beat-off: #2C323D;
     --beat-on: #C3CBD8;
+    --danger: #F2705F;
+    --on-danger: #1F0703;
     --shadow: 0 0 0 1px #232833;
   }
 
@@ -107,7 +113,33 @@
     font-variant-numeric: tabular-nums;
   }
   .num-field input:disabled { opacity: .5; }
+  .text-input { font-size: 14px; }
+  .text-input::placeholder { color: var(--muted); }
+  .preset-form { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; }
+  .btn.small { height: 42px; font-size: 14px; padding: 0 14px; border-radius: 10px; }
+  .preset-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+  .preset-list li { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 6px; }
+  .preset-list li.empty { display: block; font-size: 13px; color: var(--muted); padding: 4px 0; }
+  .preset-load {
+    display: grid; gap: 1px; text-align: left;
+    padding: 9px 12px;
+    border: 1px solid var(--line); border-radius: 12px;
+    background: transparent;
+  }
+  .preset-load:hover { border-color: var(--muted); }
+  .preset-load .name { font-weight: 700; overflow-wrap: anywhere; }
+  .preset-load .meta { font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
+  .preset-list li.active .preset-load { border-color: var(--accent); background: var(--accent-soft); }
+  .preset-del {
+    min-width: 52px; padding: 0 10px;
+    border: 1px solid var(--line); border-radius: 12px;
+    background: transparent; color: var(--muted);
+    font-size: 12px; font-weight: 500;
+  }
+  .preset-del:hover { color: var(--ink); border-color: var(--muted); }
+  .preset-del.confirm { background: var(--danger); border-color: var(--danger); color: var(--on-danger); }
   .status { margin: 0; font-size: 13px; color: var(--muted); min-height: 1.5em; }
+  #presetStatus:empty { display: none; }
   .status b { color: var(--ink); font-weight: 700; font-variant-numeric: tabular-nums; }
 
   .pendulum { display: block; width: 100%; max-width: 260px; height: auto; margin: 0 auto; }
@@ -321,6 +353,16 @@
     <p class="status" id="trainerStatus" aria-live="polite"></p>
   </section>
 
+  <section class="panel" aria-labelledby="presetTitle">
+    <h2 id="presetTitle">프리셋</h2>
+    <form id="presetForm" class="preset-form">
+      <input id="presetName" class="text-input" type="text" maxlength="40" placeholder="곡 이름 (예: 캐논 변주 연습)" aria-label="프리셋 이름">
+      <button class="btn small" type="submit">현재 설정 저장</button>
+    </form>
+    <ul id="presetList" class="preset-list"></ul>
+    <p class="status" id="presetStatus" aria-live="polite"></p>
+  </section>
+
   <p class="keys">
     <kbd>Space</kbd> 시작/정지 · <kbd>T</kbd> 탭 템포 · <kbd>↑</kbd><kbd>↓</kbd> ±1 · <kbd>Shift</kbd>+<kbd>↑</kbd><kbd>↓</kbd> ±5
   </p>
@@ -364,6 +406,7 @@
     subdivs: $("subdivs"), subNote: $("subNote"), voices: $("voices"),
     trToggle: $("trainerToggle"), trLabel: $("trainerLabel"), trStatus: $("trainerStatus"),
     trStart: $("trStart"), trTarget: $("trTarget"), trStep: $("trStep"), trBars: $("trBars"),
+    presetForm: $("presetForm"), presetName: $("presetName"), presetList: $("presetList"), presetStatus: $("presetStatus"),
     sound: $("sound"), soundLabel: $("soundLabel"), volume: $("volume"),
     arm: $("arm"), weight: $("weight"), ticks: $("ticks")
   };
@@ -390,8 +433,23 @@
     if (Number.isFinite(saved.volume)) state.volume = Math.min(100, Math.max(0, saved.volume));
   } catch (_) {}
 
+  const PRESET_KEY = "pendulum-metronome-presets";
+  const EXAMPLE_PRESETS = [
+    { name: "예시 · 스케일 연습", bpm: 72, meter: 2, subdiv: 4, voice: "click" },
+    { name: "예시 · 왈츠", bpm: 138, meter: 1, subdiv: 1, voice: "wood" },
+    { name: "예시 · 6/8 발라드", bpm: 126, meter: 4, subdiv: 1, voice: "hihat" }
+  ];
+  const isPreset = (p) => p && typeof p.name === "string" && Number.isFinite(p.bpm)
+    && METERS[p.meter] && SUBDIVS.includes(p.subdiv) && VOICE_NAMES[p.voice];
+  let presets = EXAMPLE_PRESETS.slice();
+  try {
+    const raw = localStorage.getItem(PRESET_KEY);
+    if (raw !== null) presets = JSON.parse(raw).filter(isPreset);
+  } catch (_) {}
+
   function save() {
     try { localStorage.setItem(STORE_KEY, JSON.stringify(state)); } catch (_) {}
+    markActivePreset();
   }
   function clampBpm(v) { return Math.min(MAX_BPM, Math.max(MIN_BPM, Math.round(v))); }
 
@@ -778,6 +836,111 @@
     tapFlash = setTimeout(() => el.tap.classList.remove("hit"), 90);
   }
 
+  // ---- Presets ----
+  const matchesState = (p) => p.bpm === state.bpm && p.meter === state.meter
+    && p.subdiv === state.subdiv && p.voice === state.voice;
+
+  function presetMeta(p) {
+    const m = METERS[p.meter];
+    const parts = [`${p.bpm} BPM`, `${m.n}/${m.d}`];
+    if (p.subdiv > 1) parts.push(`박당 ${p.subdiv}클릭`);
+    parts.push(VOICE_NAMES[p.voice]);
+    return parts.join(" · ");
+  }
+
+  function storePresets() {
+    try {
+      localStorage.setItem(PRESET_KEY, JSON.stringify(presets));
+      return true;
+    } catch (_) {
+      el.presetStatus.textContent = "이 브라우저에서는 프리셋을 저장할 수 없어서, 창을 닫으면 사라집니다.";
+      return false;
+    }
+  }
+
+  function markActivePreset() {
+    [...el.presetList.children].forEach((li, i) => {
+      if (presets[i]) li.classList.toggle("active", matchesState(presets[i]));
+    });
+  }
+
+  function renderPresets() {
+    el.presetList.innerHTML = "";
+    if (!presets.length) {
+      const li = document.createElement("li");
+      li.className = "empty";
+      li.textContent = "저장된 프리셋이 없습니다. 위에서 이름을 입력하고 현재 설정을 저장하세요.";
+      el.presetList.appendChild(li);
+      return;
+    }
+    presets.forEach((p, i) => {
+      const li = document.createElement("li");
+      const load = document.createElement("button");
+      load.type = "button";
+      load.className = "preset-load";
+      const name = document.createElement("span");
+      name.className = "name";
+      name.textContent = p.name;
+      const meta = document.createElement("span");
+      meta.className = "meta";
+      meta.textContent = presetMeta(p);
+      load.append(name, meta);
+      load.addEventListener("click", () => loadPreset(i));
+
+      const del = document.createElement("button");
+      del.type = "button";
+      del.className = "preset-del";
+      del.textContent = "삭제";
+      del.setAttribute("aria-label", `${p.name} 삭제`);
+      let armed = null;
+      del.addEventListener("click", () => {
+        if (armed) { clearTimeout(armed); deletePreset(i); return; }
+        del.classList.add("confirm");
+        del.textContent = "삭제 확인";
+        armed = setTimeout(() => {
+          armed = null;
+          del.classList.remove("confirm");
+          del.textContent = "삭제";
+        }, 3000);
+      });
+      li.append(load, del);
+      el.presetList.appendChild(li);
+    });
+    markActivePreset();
+  }
+
+  function loadPreset(i) {
+    const p = presets[i];
+    setBpm(p.bpm);
+    state.subdiv = p.subdiv;
+    state.voice = p.voice;
+    setMeter(p.meter);
+    renderSound();
+    el.presetStatus.textContent = state.trainer.on
+      ? `‘${p.name}’ 프리셋을 불러왔습니다. 스피드 트레이너가 켜져 있어서 시작하면 트레이너 시작 BPM(${state.trainer.start})으로 바뀝니다.`
+      : `‘${p.name}’ 프리셋을 불러왔습니다.`;
+  }
+
+  function deletePreset(i) {
+    const [p] = presets.splice(i, 1);
+    renderPresets();
+    if (storePresets()) el.presetStatus.textContent = `‘${p.name}’ 프리셋을 삭제했습니다.`;
+  }
+
+  el.presetForm.addEventListener("submit", (e) => {
+    e.preventDefault();
+    const m = METERS[state.meter];
+    const name = el.presetName.value.trim() || `${state.bpm} BPM ${m.n}/${m.d}`;
+    const preset = { name, bpm: state.bpm, meter: state.meter, subdiv: state.subdiv, voice: state.voice };
+    const existing = presets.findIndex((p) => p.name === name);
+    if (existing >= 0) presets[existing] = preset; else presets.push(preset);
+    renderPresets();
+    el.presetName.value = "";
+    if (storePresets()) {
+      el.presetStatus.textContent = existing >= 0 ? `‘${name}’ 프리셋을 현재 설정으로 덮어썼습니다.` : `‘${name}’ 프리셋을 저장했습니다.`;
+    }
+  });
+
   // ---- Events ----
   document.querySelectorAll(".nudge").forEach((b) =>
     b.addEventListener("click", () => setBpm(state.bpm + Number(b.dataset.step))));
@@ -820,6 +983,7 @@
   renderSubdivs();
   renderSound();
   renderTrainer();
+  renderPresets();
   renderPlay();
   setArm(0);
 })();
