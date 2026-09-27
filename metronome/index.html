@@ -171,7 +171,8 @@
   .settings { display: grid; gap: 14px; border-top: 1px solid var(--line); padding-top: 16px; }
   .field { display: grid; gap: 8px; }
   .label { font-size: 12px; font-weight: 500; color: var(--muted); letter-spacing: .04em; }
-  .chips { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 6px; }
+  .label-note { color: var(--ink); font-weight: 500; letter-spacing: 0; margin-left: 6px; }
+  .chips { display: grid; grid-template-columns: repeat(var(--cols, 7), minmax(0, 1fr)); gap: 6px; }
   .chip {
     min-width: 0; height: 36px; padding: 0;
     border-radius: 10px;
@@ -267,6 +268,10 @@
         <div class="chips" id="meters" role="group" aria-labelledby="meterLabel"></div>
       </div>
       <div class="field">
+        <span class="label" id="subLabel">박 세분화 <span class="label-note" id="subNote"></span></span>
+        <div class="chips" id="subdivs" style="--cols: 5" role="group" aria-labelledby="subLabel"></div>
+      </div>
+      <div class="field">
         <span class="label">소리</span>
         <div class="sound-row">
           <button id="sound" class="toggle" type="button" aria-pressed="true">
@@ -303,6 +308,11 @@
     [200, "Presto", "매우 빠르게"],
     [Infinity, "Prestissimo", "가능한 한 빠르게"]
   ];
+  const SUBDIVS = [1, 2, 3, 4, 6];
+  const SUBDIV_NAMES = {
+    4: { 1: "4분음표", 2: "8분음표", 3: "8분음표 셋잇단", 4: "16분음표", 6: "16분음표 여섯잇단" },
+    8: { 1: "8분음표", 2: "16분음표", 3: "16분음표 셋잇단", 4: "32분음표", 6: "32분음표 여섯잇단" }
+  };
   const STORE_KEY = "pendulum-metronome";
   const SWING_DEG = 26;
   const LOOKAHEAD = 0.12;
@@ -313,15 +323,17 @@
     bpm: $("bpm"), slider: $("bpmSlider"), mm: $("mmBpm"), marking: $("marking"),
     beats: $("beats"), play: $("play"), playLabel: $("playLabel"), playIcon: $("playIcon"),
     tap: $("tap"), tapHint: $("tapHint"), meters: $("meters"),
+    subdivs: $("subdivs"), subNote: $("subNote"),
     sound: $("sound"), soundLabel: $("soundLabel"), volume: $("volume"),
     arm: $("arm"), weight: $("weight"), ticks: $("ticks")
   };
 
-  const state = { bpm: 120, meter: 2, sound: true, volume: 80 };
+  const state = { bpm: 120, meter: 2, subdiv: 1, sound: true, volume: 80 };
   try {
     const saved = JSON.parse(localStorage.getItem(STORE_KEY) || "{}");
     if (Number.isFinite(saved.bpm)) state.bpm = clampBpm(saved.bpm);
     if (Number.isInteger(saved.meter) && METERS[saved.meter]) state.meter = saved.meter;
+    if (SUBDIVS.includes(saved.subdiv)) state.subdiv = saved.subdiv;
     if (typeof saved.sound === "boolean") state.sound = saved.sound;
     if (Number.isFinite(saved.volume)) state.volume = Math.min(100, Math.max(0, saved.volume));
   } catch (_) {}
@@ -403,8 +415,31 @@
   function setMeter(i) {
     state.meter = i;
     renderMeters();
+    renderSubdivs();
     save();
     if (playing) beatIdx = 0;
+  }
+
+  function renderSubdivs() {
+    el.subdivs.innerHTML = "";
+    SUBDIVS.forEach((n) => {
+      const b = document.createElement("button");
+      b.type = "button";
+      b.className = "chip";
+      b.textContent = n === 1 ? "없음" : String(n);
+      b.setAttribute("aria-label", n === 1 ? "세분화 없음" : `박당 ${n}클릭`);
+      b.setAttribute("aria-pressed", String(n === state.subdiv));
+      b.addEventListener("click", () => setSubdiv(n));
+      el.subdivs.appendChild(b);
+    });
+    const name = SUBDIV_NAMES[METERS[state.meter].d][state.subdiv];
+    el.subNote.textContent = state.subdiv === 1 ? name : `박당 ${state.subdiv}클릭 · ${name}`;
+  }
+
+  function setSubdiv(n) {
+    state.subdiv = n;
+    renderSubdivs();
+    save();
   }
 
   function renderSound() {
@@ -432,12 +467,13 @@
     if (ctx.state !== "running") await ctx.resume();
   }
 
-  function click(time, accent) {
+  const CLICK_LEVELS = { accent: [1760, 1], beat: [1175, 0.62], sub: [880, 0.3] };
+  function click(time, level) {
+    const [freq, peak] = CLICK_LEVELS[level];
     const osc = ctx.createOscillator();
     const g = ctx.createGain();
     osc.type = "triangle";
-    osc.frequency.setValueAtTime(accent ? 1760 : 1175, time);
-    const peak = accent ? 1 : 0.62;
+    osc.frequency.setValueAtTime(freq, time);
     g.gain.setValueAtTime(0.0001, time);
     g.gain.exponentialRampToValueAtTime(peak, time + 0.0015);
     g.gain.exponentialRampToValueAtTime(0.0001, time + 0.055);
@@ -446,19 +482,26 @@
     osc.stop(time + 0.07);
   }
 
-  let playing = false, nextTime = 0, beatIdx = 0, seq = 0;
+  let playing = false, nextTime = 0, beatIdx = 0, subIdx = 0, seq = 0;
+  let curBeat = 0, curSub = 1, curBeatDur = 0.5;
   const queue = [];
 
+  // Tempo, meter and subdivision changes take effect at the next beat boundary.
   function schedule() {
     if (!playing) return;
-    const n = METERS[state.meter].n;
     while (nextTime < ctx.currentTime + LOOKAHEAD) {
-      const beat = beatIdx % n;
-      const dur = 60 / state.bpm;
-      if (state.sound) click(nextTime, beat === 0 && n > 1);
-      queue.push({ time: nextTime, beat, dur, seq: seq++ });
-      nextTime += dur;
-      beatIdx = beat + 1;
+      if (subIdx === 0) {
+        const n = METERS[state.meter].n;
+        curBeat = beatIdx % n;
+        curSub = state.subdiv;
+        curBeatDur = 60 / state.bpm;
+        if (state.sound) click(nextTime, curBeat === 0 && n > 1 ? "accent" : "beat");
+        queue.push({ time: nextTime, beat: curBeat, dur: curBeatDur, seq: seq++ });
+      } else if (state.sound) {
+        click(nextTime, "sub");
+      }
+      nextTime += curBeatDur / curSub;
+      if (++subIdx >= curSub) { subIdx = 0; beatIdx = curBeat + 1; }
     }
   }
 
@@ -509,7 +552,7 @@
       return;
     }
     playing = true;
-    beatIdx = 0; seq = 0; current = null; queue.length = 0;
+    beatIdx = 0; subIdx = 0; seq = 0; current = null; queue.length = 0;
     nextTime = ctx.currentTime + 0.06;
     schedule();
     ticker.start();
@@ -578,6 +621,7 @@
 
   renderTempo();
   renderMeters();
+  renderSubdivs();
   renderSound();
   renderPlay();
   setArm(0);
