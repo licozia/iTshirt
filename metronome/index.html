@@ -200,6 +200,7 @@
     font-size: 18px; font-weight: 600;
     font-variant-numeric: tabular-nums;
   }
+  .chip.word { font-family: var(--font-ui); font-size: 13px; font-weight: 500; }
   .chip:hover { border-color: var(--muted); }
   .chip[aria-pressed="true"] { background: var(--ink); border-color: var(--ink); color: var(--surface); }
   .sound-row { display: grid; grid-template-columns: auto 1fr; align-items: center; gap: 14px; }
@@ -298,6 +299,7 @@
           </button>
           <input id="volume" type="range" min="0" max="100" step="1" value="80" aria-label="볼륨">
         </div>
+        <div class="chips" id="voices" style="--cols: 5" role="group" aria-label="클릭음 종류"></div>
       </div>
     </div>
   </section>
@@ -348,6 +350,7 @@
     4: { 1: "4분음표", 2: "8분음표", 3: "8분음표 셋잇단", 4: "16분음표", 6: "16분음표 여섯잇단" },
     8: { 1: "8분음표", 2: "16분음표", 3: "16분음표 셋잇단", 4: "32분음표", 6: "32분음표 여섯잇단" }
   };
+  const VOICE_NAMES = { click: "클릭", wood: "우드블록", cowbell: "카우벨", hihat: "하이햇", beep: "전자음" };
   const STORE_KEY = "pendulum-metronome";
   const SWING_DEG = 26;
   const LOOKAHEAD = 0.12;
@@ -358,7 +361,7 @@
     bpm: $("bpm"), slider: $("bpmSlider"), mm: $("mmBpm"), marking: $("marking"),
     beats: $("beats"), play: $("play"), playLabel: $("playLabel"), playIcon: $("playIcon"),
     tap: $("tap"), tapHint: $("tapHint"), meters: $("meters"),
-    subdivs: $("subdivs"), subNote: $("subNote"),
+    subdivs: $("subdivs"), subNote: $("subNote"), voices: $("voices"),
     trToggle: $("trainerToggle"), trLabel: $("trainerLabel"), trStatus: $("trainerStatus"),
     trStart: $("trStart"), trTarget: $("trTarget"), trStep: $("trStep"), trBars: $("trBars"),
     sound: $("sound"), soundLabel: $("soundLabel"), volume: $("volume"),
@@ -367,7 +370,7 @@
 
   const TRAINER_LIMITS = { start: [MIN_BPM, MAX_BPM], target: [MIN_BPM, MAX_BPM], step: [1, 50], bars: [1, 64] };
   const state = {
-    bpm: 120, meter: 2, subdiv: 1, sound: true, volume: 80,
+    bpm: 120, meter: 2, subdiv: 1, sound: true, volume: 80, voice: "click",
     trainer: { on: false, start: 80, target: 120, step: 4, bars: 4 }
   };
   const clampInt = (v, [lo, hi]) => Math.min(hi, Math.max(lo, Math.round(v)));
@@ -382,6 +385,7 @@
     if (Number.isFinite(saved.bpm)) state.bpm = clampBpm(saved.bpm);
     if (Number.isInteger(saved.meter) && METERS[saved.meter]) state.meter = saved.meter;
     if (SUBDIVS.includes(saved.subdiv)) state.subdiv = saved.subdiv;
+    if (VOICE_NAMES[saved.voice]) state.voice = saved.voice;
     if (typeof saved.sound === "boolean") state.sound = saved.sound;
     if (Number.isFinite(saved.volume)) state.volume = Math.min(100, Math.max(0, saved.volume));
   } catch (_) {}
@@ -496,6 +500,25 @@
     el.volume.value = state.volume;
     el.volume.disabled = !state.sound;
     applyVolume();
+    el.voices.innerHTML = "";
+    Object.entries(VOICE_NAMES).forEach(([key, name]) => {
+      const b = document.createElement("button");
+      b.type = "button";
+      b.className = "chip word";
+      b.textContent = name;
+      b.setAttribute("aria-pressed", String(key === state.voice));
+      b.addEventListener("click", () => setVoice(key));
+      el.voices.appendChild(b);
+    });
+  }
+
+  async function setVoice(key) {
+    state.voice = key;
+    renderSound();
+    save();
+    if (playing || !state.sound) return;
+    try { await ensureAudio(); } catch (_) { return; }
+    click(ctx.currentTime + 0.02, "accent");
   }
 
   // ---- Audio: Web Audio lookahead scheduler ----
@@ -515,19 +538,80 @@
     if (ctx.state !== "running") await ctx.resume();
   }
 
-  const CLICK_LEVELS = { accent: [1760, 1], beat: [1175, 0.62], sub: [880, 0.3] };
-  function click(time, level) {
-    const [freq, peak] = CLICK_LEVELS[level];
-    const osc = ctx.createOscillator();
+  // [pitch multiplier, peak gain] per click role
+  const LEVELS = { accent: [1.5, 1], beat: [1, 0.62], sub: [0.8, 0.3] };
+
+  function envelope(time, peak, decay) {
     const g = ctx.createGain();
-    osc.type = "triangle";
-    osc.frequency.setValueAtTime(freq, time);
     g.gain.setValueAtTime(0.0001, time);
     g.gain.exponentialRampToValueAtTime(peak, time + 0.0015);
-    g.gain.exponentialRampToValueAtTime(0.0001, time + 0.055);
-    osc.connect(g).connect(master);
+    g.gain.exponentialRampToValueAtTime(0.0001, time + decay);
+    g.connect(master);
+    return g;
+  }
+  function tone(type, freq, time, dest, len) {
+    const osc = ctx.createOscillator();
+    osc.type = type;
+    osc.frequency.setValueAtTime(freq, time);
+    osc.connect(dest);
     osc.start(time);
-    osc.stop(time + 0.07);
+    osc.stop(time + len);
+    return osc;
+  }
+  let noiseBuf = null;
+  function noise(time, dest, len) {
+    if (!noiseBuf) {
+      noiseBuf = ctx.createBuffer(1, Math.floor(ctx.sampleRate * 0.25), ctx.sampleRate);
+      const d = noiseBuf.getChannelData(0);
+      for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
+    }
+    const src = ctx.createBufferSource();
+    src.buffer = noiseBuf;
+    src.connect(dest);
+    src.start(time);
+    src.stop(time + len);
+  }
+
+  const VOICES = {
+    click(time, p, peak) {
+      tone("triangle", 1175 * p, time, envelope(time, peak, 0.055), 0.07);
+    },
+    wood(time, p, peak) {
+      const g = envelope(time, peak * 0.7, 0.045);
+      const osc = tone("sine", 1250 * p, time, g, 0.06);
+      osc.frequency.exponentialRampToValueAtTime(900 * p, time + 0.012);
+      tone("sine", 2480 * p, time, envelope(time, peak * 0.25, 0.02), 0.03);
+    },
+    cowbell(time, p, peak) {
+      const bp = ctx.createBiquadFilter();
+      bp.type = "bandpass";
+      bp.frequency.value = 2400 * p;
+      bp.Q.value = 1.2;
+      bp.connect(envelope(time, peak * 0.6, 0.2));
+      tone("square", 540 * p, time, bp, 0.22);
+      tone("square", 800 * p, time, bp, 0.22);
+    },
+    hihat(time, p, peak) {
+      const hp = ctx.createBiquadFilter();
+      hp.type = "highpass";
+      hp.frequency.value = 6500 * p;
+      hp.connect(envelope(time, peak * 0.85, p > 1 ? 0.12 : 0.05));
+      noise(time, hp, 0.14);
+    },
+    beep(time, p, peak) {
+      const g = ctx.createGain();
+      g.gain.setValueAtTime(0, time);
+      g.gain.linearRampToValueAtTime(peak * 0.7, time + 0.003);
+      g.gain.setValueAtTime(peak * 0.7, time + 0.05);
+      g.gain.linearRampToValueAtTime(0, time + 0.07);
+      g.connect(master);
+      tone("sine", 880 * p, time, g, 0.08);
+    }
+  };
+
+  function click(time, level) {
+    const [p, peak] = LEVELS[level];
+    VOICES[state.voice](time, p, peak);
   }
 
   let playing = false, nextTime = 0, beatIdx = 0, subIdx = 0, seq = 0;
