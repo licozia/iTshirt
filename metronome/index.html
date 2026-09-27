@@ -1,0 +1,587 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Pendulum Metronome</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:ital,wght@0,500;0,600;1,500&family=Noto+Sans+KR:wght@400;500;700&display=swap">
+<style>
+  :root {
+    --bg: #E8EBEF;
+    --surface: #F9FAFB;
+    --ink: #19202D;
+    --muted: #5A6476;
+    --line: #CBD2DB;
+    --accent: #95600F;
+    --accent-soft: #F1E3C8;
+    --on-accent: #FFFFFF;
+    --beat-off: #D4D9E0;
+    --beat-on: #33405A;
+    --shadow: 0 1px 2px rgba(20, 28, 40, .06), 0 10px 30px rgba(20, 28, 40, .08);
+    --font-num: "Barlow Condensed", "Arial Narrow", "Roboto Condensed", sans-serif;
+    --font-ui: "Noto Sans KR", "Malgun Gothic", "Apple SD Gothic Neo", system-ui, sans-serif;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      color-scheme: dark;
+      --bg: #0F1217;
+      --surface: #181C24;
+      --ink: #E5E8ED;
+      --muted: #8D97A8;
+      --line: #2B313C;
+      --accent: #E2A53F;
+      --accent-soft: #3A2C14;
+      --on-accent: #1C1405;
+      --beat-off: #2C323D;
+      --beat-on: #C3CBD8;
+      --shadow: 0 0 0 1px #232833;
+    }
+  }
+  :root[data-theme="dark"] {
+    color-scheme: dark;
+    --bg: #0F1217;
+    --surface: #181C24;
+    --ink: #E5E8ED;
+    --muted: #8D97A8;
+    --line: #2B313C;
+    --accent: #E2A53F;
+    --accent-soft: #3A2C14;
+    --on-accent: #1C1405;
+    --beat-off: #2C323D;
+    --beat-on: #C3CBD8;
+    --shadow: 0 0 0 1px #232833;
+  }
+
+  * { box-sizing: border-box; }
+  html, body { min-height: 100%; }
+  body {
+    margin: 0;
+    padding-inline: 16px;
+    background: var(--bg);
+    color: var(--ink);
+    font-family: var(--font-ui);
+    font-size: 14px;
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+  }
+  button, input { font: inherit; color: inherit; }
+  button { cursor: pointer; }
+  :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+  .app {
+    max-width: 440px;
+    margin: 0 auto;
+    padding-block: 28px 36px;
+    display: grid;
+    gap: 16px;
+  }
+
+  .top { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
+  .top h1 { margin: 0; font-size: 15px; font-weight: 700; letter-spacing: .01em; }
+  .mm { font-family: var(--font-num); font-size: 18px; color: var(--muted); font-variant-numeric: tabular-nums; }
+  .mm b { color: var(--ink); font-weight: 600; }
+
+  .instrument {
+    background: var(--surface);
+    border-radius: 22px;
+    box-shadow: var(--shadow);
+    padding: 20px 20px 22px;
+    display: grid;
+    gap: 18px;
+  }
+
+  .pendulum { display: block; width: 100%; max-width: 260px; height: auto; margin: 0 auto; }
+  .pendulum .scale { stroke: var(--line); stroke-width: 2; stroke-linecap: round; fill: none; }
+  .pendulum .tick { stroke: var(--line); stroke-width: 2; stroke-linecap: round; }
+  .pendulum .tick.mid { stroke: var(--muted); }
+  .pendulum .rod { stroke: var(--ink); stroke-width: 3; stroke-linecap: round; }
+  .pendulum .weight { fill: var(--accent); }
+  .pendulum .pivot { fill: var(--ink); }
+  .pendulum .base { fill: var(--beat-off); }
+
+  .tempo { display: grid; justify-items: center; gap: 2px; }
+  .marking { font-family: var(--font-num); font-style: italic; font-weight: 500; font-size: 20px; color: var(--accent); min-height: 1.4em; }
+  .marking span { font-family: var(--font-ui); font-style: normal; font-size: 13px; color: var(--muted); margin-left: 6px; }
+  .bpm-row { display: flex; align-items: center; justify-content: center; gap: 8px; width: 100%; }
+  .nudge {
+    width: 44px; height: 44px; flex: none;
+    border-radius: 50%;
+    border: 1px solid var(--line);
+    background: transparent;
+    font-family: var(--font-num);
+    font-size: 17px; font-weight: 600;
+    font-variant-numeric: tabular-nums;
+    transition: background-color .12s, border-color .12s;
+  }
+  .nudge:hover { background: var(--bg); border-color: var(--muted); }
+  .nudge:active { transform: translateY(1px); }
+  #bpm {
+    width: 3.1ch;
+    min-width: 0;
+    border: none;
+    background: transparent;
+    text-align: center;
+    font-family: var(--font-num);
+    font-weight: 600;
+    font-size: clamp(64px, 20vw, 92px);
+    line-height: 1;
+    font-variant-numeric: tabular-nums;
+    padding: 0;
+    border-radius: 8px;
+    -moz-appearance: textfield;
+    appearance: textfield;
+  }
+  #bpm::-webkit-outer-spin-button, #bpm::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+  .unit { font-size: 12px; font-weight: 500; letter-spacing: .14em; color: var(--muted); }
+  input[type="range"] { width: 100%; accent-color: var(--accent); margin: 0; }
+  .slider-wrap { display: grid; gap: 4px; width: 100%; margin-top: 10px; }
+  .slider-scale { display: flex; justify-content: space-between; font-family: var(--font-num); font-size: 13px; color: var(--muted); font-variant-numeric: tabular-nums; }
+
+  .beats { display: flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: 10px; min-height: 26px; }
+  .dot {
+    width: 16px; height: 16px; border-radius: 50%;
+    background: var(--beat-off);
+    transition: transform .08s ease-out, background-color .08s;
+  }
+  .dot.down { width: 22px; height: 22px; box-shadow: inset 0 0 0 2px var(--accent); background: transparent; }
+  .dot.on { background: var(--beat-on); transform: scale(1.2); }
+  .dot.down.on { background: var(--accent); }
+
+  .controls { display: grid; grid-template-columns: 1fr 1.6fr; gap: 10px; }
+  .btn {
+    height: 56px;
+    border-radius: 14px;
+    border: 1px solid var(--line);
+    background: transparent;
+    font-weight: 700;
+    font-size: 16px;
+    display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+    transition: background-color .12s, transform .06s;
+  }
+  .btn:hover { background: var(--bg); }
+  .btn:active { transform: translateY(1px); }
+  .btn.primary { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
+  .btn.primary:hover { filter: brightness(1.06); background: var(--accent); }
+  .btn svg { width: 16px; height: 16px; fill: currentColor; }
+  #tap.hit { background: var(--accent-soft); }
+  .tap-hint { font-size: 12px; color: var(--muted); text-align: center; min-height: 1.5em; margin-top: -8px; }
+
+  .settings { display: grid; gap: 14px; border-top: 1px solid var(--line); padding-top: 16px; }
+  .field { display: grid; gap: 8px; }
+  .label { font-size: 12px; font-weight: 500; color: var(--muted); letter-spacing: .04em; }
+  .chips { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 6px; }
+  .chip {
+    min-width: 0; height: 36px; padding: 0;
+    border-radius: 10px;
+    border: 1px solid var(--line);
+    background: transparent;
+    font-family: var(--font-num);
+    font-size: 18px; font-weight: 600;
+    font-variant-numeric: tabular-nums;
+  }
+  .chip:hover { border-color: var(--muted); }
+  .chip[aria-pressed="true"] { background: var(--ink); border-color: var(--ink); color: var(--surface); }
+  .sound-row { display: grid; grid-template-columns: auto 1fr; align-items: center; gap: 14px; }
+  .toggle {
+    display: inline-flex; align-items: center; gap: 8px;
+    height: 36px; padding: 0 12px 0 6px;
+    border-radius: 999px;
+    border: 1px solid var(--line);
+    background: transparent;
+    font-size: 13px; font-weight: 500;
+  }
+  .toggle .knob { width: 26px; height: 26px; border-radius: 50%; background: var(--beat-off); display: grid; place-items: center; }
+  .toggle .knob svg { width: 14px; height: 14px; fill: var(--muted); }
+  .toggle[aria-pressed="true"] .knob { background: var(--accent); }
+  .toggle[aria-pressed="true"] .knob svg { fill: var(--on-accent); }
+  #volume:disabled { opacity: .4; }
+
+  .keys { margin: 0; font-size: 12px; color: var(--muted); text-align: center; line-height: 2; }
+  kbd {
+    font-family: var(--font-num); font-size: 13px; font-weight: 600;
+    padding: 1px 6px; border-radius: 5px;
+    border: 1px solid var(--line); background: var(--surface); color: var(--ink);
+  }
+
+  @media (max-width: 380px) {
+    .instrument { padding: 16px 14px 18px; }
+    .bpm-row { gap: 4px; }
+    .nudge { width: 40px; height: 40px; font-size: 15px; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .dot, .btn, .nudge { transition: none; }
+  }
+</style>
+</head>
+<body>
+<main class="app">
+  <header class="top">
+    <h1>펜듈럼 메트로놈</h1>
+    <span class="mm" aria-hidden="true">M.M. ♩ = <b id="mmBpm">120</b></span>
+  </header>
+
+  <section class="instrument" aria-label="메트로놈">
+    <svg class="pendulum" viewBox="0 0 240 170" role="img" aria-label="진자 표시">
+      <path class="scale" id="scaleArc"></path>
+      <g id="ticks"></g>
+      <rect class="base" x="80" y="156" width="80" height="8" rx="4"></rect>
+      <g id="arm">
+        <line class="rod" x1="120" y1="156" x2="120" y2="30"></line>
+        <rect id="weight" class="weight" x="108" y="80" width="24" height="16" rx="3"></rect>
+      </g>
+      <circle class="pivot" cx="120" cy="156" r="5"></circle>
+    </svg>
+
+    <div class="tempo">
+      <div class="marking" id="marking" aria-live="polite"></div>
+      <div class="bpm-row">
+        <button class="nudge" type="button" data-step="-5" aria-label="5 BPM 느리게">−5</button>
+        <button class="nudge" type="button" data-step="-1" aria-label="1 BPM 느리게">−1</button>
+        <input id="bpm" type="number" min="20" max="300" step="1" value="120" inputmode="numeric" aria-label="템포 (BPM)">
+        <button class="nudge" type="button" data-step="1" aria-label="1 BPM 빠르게">+1</button>
+        <button class="nudge" type="button" data-step="5" aria-label="5 BPM 빠르게">+5</button>
+      </div>
+      <div class="unit">BPM</div>
+      <div class="slider-wrap">
+        <input id="bpmSlider" type="range" min="20" max="300" step="1" value="120" aria-label="템포 슬라이더">
+        <div class="slider-scale" aria-hidden="true"><span>20</span><span>60</span><span>120</span><span>180</span><span>240</span><span>300</span></div>
+      </div>
+    </div>
+
+    <div class="beats" id="beats" aria-hidden="true"></div>
+
+    <div class="controls">
+      <button id="tap" class="btn" type="button">탭 템포</button>
+      <button id="play" class="btn primary" type="button" aria-pressed="false">
+        <svg viewBox="0 0 16 16" aria-hidden="true"><path id="playIcon" d="M4 2.5v11l9-5.5z"></path></svg>
+        <span id="playLabel">시작</span>
+      </button>
+    </div>
+    <div class="tap-hint" id="tapHint" aria-live="polite"></div>
+
+    <div class="settings">
+      <div class="field">
+        <span class="label" id="meterLabel">박자</span>
+        <div class="chips" id="meters" role="group" aria-labelledby="meterLabel"></div>
+      </div>
+      <div class="field">
+        <span class="label">소리</span>
+        <div class="sound-row">
+          <button id="sound" class="toggle" type="button" aria-pressed="true">
+            <span class="knob"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M2 6h3l4-3.5v11L5 10H2z M11 5.2a4 4 0 0 1 0 5.6l-.8-.8a2.9 2.9 0 0 0 0-4z"></path></svg></span>
+            <span id="soundLabel">켜짐</span>
+          </button>
+          <input id="volume" type="range" min="0" max="100" step="1" value="80" aria-label="볼륨">
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <p class="keys">
+    <kbd>Space</kbd> 시작/정지 · <kbd>T</kbd> 탭 템포 · <kbd>↑</kbd><kbd>↓</kbd> ±1 · <kbd>Shift</kbd>+<kbd>↑</kbd><kbd>↓</kbd> ±5
+  </p>
+</main>
+
+<script>
+(() => {
+  const MIN_BPM = 20, MAX_BPM = 300;
+  const METERS = [
+    { n: 2, d: 4 }, { n: 3, d: 4 }, { n: 4, d: 4 }, { n: 5, d: 4 },
+    { n: 6, d: 8 }, { n: 7, d: 8 }, { n: 12, d: 8 }
+  ];
+  const MARKINGS = [
+    [40, "Grave", "아주 느리고 장중하게"],
+    [60, "Largo", "아주 느리게"],
+    [66, "Larghetto", "조금 느리게"],
+    [76, "Adagio", "느리게"],
+    [108, "Andante", "걷는 빠르기로"],
+    [120, "Moderato", "보통 빠르기로"],
+    [156, "Allegro", "빠르게"],
+    [176, "Vivace", "생기 있게"],
+    [200, "Presto", "매우 빠르게"],
+    [Infinity, "Prestissimo", "가능한 한 빠르게"]
+  ];
+  const STORE_KEY = "pendulum-metronome";
+  const SWING_DEG = 26;
+  const LOOKAHEAD = 0.12;
+  const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
+
+  const $ = (id) => document.getElementById(id);
+  const el = {
+    bpm: $("bpm"), slider: $("bpmSlider"), mm: $("mmBpm"), marking: $("marking"),
+    beats: $("beats"), play: $("play"), playLabel: $("playLabel"), playIcon: $("playIcon"),
+    tap: $("tap"), tapHint: $("tapHint"), meters: $("meters"),
+    sound: $("sound"), soundLabel: $("soundLabel"), volume: $("volume"),
+    arm: $("arm"), weight: $("weight"), ticks: $("ticks")
+  };
+
+  const state = { bpm: 120, meter: 2, sound: true, volume: 80 };
+  try {
+    const saved = JSON.parse(localStorage.getItem(STORE_KEY) || "{}");
+    if (Number.isFinite(saved.bpm)) state.bpm = clampBpm(saved.bpm);
+    if (Number.isInteger(saved.meter) && METERS[saved.meter]) state.meter = saved.meter;
+    if (typeof saved.sound === "boolean") state.sound = saved.sound;
+    if (Number.isFinite(saved.volume)) state.volume = Math.min(100, Math.max(0, saved.volume));
+  } catch (_) {}
+
+  function save() {
+    try { localStorage.setItem(STORE_KEY, JSON.stringify(state)); } catch (_) {}
+  }
+  function clampBpm(v) { return Math.min(MAX_BPM, Math.max(MIN_BPM, Math.round(v))); }
+
+  // Pendulum scale ticks
+  for (let deg = -SWING_DEG; deg <= SWING_DEG; deg += SWING_DEG / 4) {
+    const r = Math.PI * deg / 180;
+    const x1 = 120 + 140 * Math.sin(r), y1 = 156 - 140 * Math.cos(r);
+    const len = deg === 0 ? 12 : 7;
+    const x2 = 120 + (140 - len) * Math.sin(r), y2 = 156 - (140 - len) * Math.cos(r);
+    const line = document.createElementNS("http://www.w3.org/2000/svg", "line");
+    line.setAttribute("class", deg === 0 ? "tick mid" : "tick");
+    line.setAttribute("x1", x1.toFixed(1)); line.setAttribute("y1", y1.toFixed(1));
+    line.setAttribute("x2", x2.toFixed(1)); line.setAttribute("y2", y2.toFixed(1));
+    el.ticks.appendChild(line);
+  }
+  {
+    const r = 124, a = Math.PI * (SWING_DEG + 4) / 180;
+    const x = (120 - r * Math.sin(a)).toFixed(1), x2 = (120 + r * Math.sin(a)).toFixed(1);
+    const y = (156 - r * Math.cos(a)).toFixed(1);
+    $("scaleArc").setAttribute("d", `M ${x} ${y} A ${r} ${r} 0 0 1 ${x2} ${y}`);
+  }
+
+  function setArm(deg) { el.arm.setAttribute("transform", `rotate(${deg.toFixed(2)} 120 156)`); }
+
+  // Like a real metronome: the weight slides up the rod for slower tempos.
+  function placeWeight() {
+    const t = (state.bpm - MIN_BPM) / (MAX_BPM - MIN_BPM);
+    const y = 36 + t * 92;
+    el.weight.setAttribute("y", y.toFixed(1));
+  }
+
+  function renderTempo() {
+    el.bpm.value = state.bpm;
+    el.slider.value = state.bpm;
+    el.mm.textContent = state.bpm;
+    const m = MARKINGS.find(([limit]) => state.bpm < limit);
+    el.marking.innerHTML = "";
+    el.marking.append(m[1]);
+    const gloss = document.createElement("span");
+    gloss.textContent = m[2];
+    el.marking.append(gloss);
+    placeWeight();
+  }
+
+  function setBpm(v) {
+    if (!Number.isFinite(v)) { renderTempo(); return; }
+    state.bpm = clampBpm(v);
+    renderTempo();
+    save();
+  }
+
+  let dots = [];
+  function renderMeters() {
+    el.meters.innerHTML = "";
+    METERS.forEach((m, i) => {
+      const b = document.createElement("button");
+      b.type = "button";
+      b.className = "chip";
+      b.textContent = `${m.n}/${m.d}`;
+      b.setAttribute("aria-pressed", String(i === state.meter));
+      b.addEventListener("click", () => setMeter(i));
+      el.meters.appendChild(b);
+    });
+    el.beats.innerHTML = "";
+    dots = Array.from({ length: METERS[state.meter].n }, (_, i) => {
+      const d = document.createElement("span");
+      d.className = i === 0 ? "dot down" : "dot";
+      el.beats.appendChild(d);
+      return d;
+    });
+  }
+
+  function setMeter(i) {
+    state.meter = i;
+    renderMeters();
+    save();
+    if (playing) beatIdx = 0;
+  }
+
+  function renderSound() {
+    el.sound.setAttribute("aria-pressed", String(state.sound));
+    el.soundLabel.textContent = state.sound ? "켜짐" : "꺼짐";
+    el.volume.value = state.volume;
+    el.volume.disabled = !state.sound;
+    applyVolume();
+  }
+
+  // ---- Audio: Web Audio lookahead scheduler ----
+  let ctx = null, master = null;
+  function applyVolume() {
+    if (!master) return;
+    const v = state.sound ? Math.pow(state.volume / 100, 1.6) : 0;
+    master.gain.setTargetAtTime(v, ctx.currentTime, 0.01);
+  }
+  async function ensureAudio() {
+    if (!ctx) {
+      ctx = new (window.AudioContext || window.webkitAudioContext)();
+      master = ctx.createGain();
+      master.connect(ctx.destination);
+      applyVolume();
+    }
+    if (ctx.state !== "running") await ctx.resume();
+  }
+
+  function click(time, accent) {
+    const osc = ctx.createOscillator();
+    const g = ctx.createGain();
+    osc.type = "triangle";
+    osc.frequency.setValueAtTime(accent ? 1760 : 1175, time);
+    const peak = accent ? 1 : 0.62;
+    g.gain.setValueAtTime(0.0001, time);
+    g.gain.exponentialRampToValueAtTime(peak, time + 0.0015);
+    g.gain.exponentialRampToValueAtTime(0.0001, time + 0.055);
+    osc.connect(g).connect(master);
+    osc.start(time);
+    osc.stop(time + 0.07);
+  }
+
+  let playing = false, nextTime = 0, beatIdx = 0, seq = 0;
+  const queue = [];
+
+  function schedule() {
+    if (!playing) return;
+    const n = METERS[state.meter].n;
+    while (nextTime < ctx.currentTime + LOOKAHEAD) {
+      const beat = beatIdx % n;
+      const dur = 60 / state.bpm;
+      if (state.sound) click(nextTime, beat === 0 && n > 1);
+      queue.push({ time: nextTime, beat, dur, seq: seq++ });
+      nextTime += dur;
+      beatIdx = beat + 1;
+    }
+  }
+
+  // Worker-driven ticks keep time when the tab is in the background.
+  const ticker = (() => {
+    let intervalId = null, worker = null;
+    const fallback = {
+      start() { clearInterval(intervalId); intervalId = setInterval(schedule, 25); },
+      stop() { clearInterval(intervalId); intervalId = null; }
+    };
+    try {
+      const src = "let id=null;onmessage=e=>{clearInterval(id);if(e.data==='start')id=setInterval(()=>postMessage(0),25);};";
+      worker = new Worker(URL.createObjectURL(new Blob([src], { type: "text/javascript" })));
+      worker.onmessage = schedule;
+    } catch (_) { worker = null; }
+    let useWorker = !!worker;
+    if (worker) {
+      worker.onerror = () => {
+        useWorker = false;
+        if (playing) fallback.start();
+      };
+    }
+    return {
+      start() { useWorker ? worker.postMessage("start") : fallback.start(); },
+      stop() { if (worker) worker.postMessage("stop"); fallback.stop(); }
+    };
+  })();
+
+  let current = null;
+  function draw() {
+    if (!playing) return;
+    const now = ctx.currentTime - (ctx.outputLatency || ctx.baseLatency || 0);
+    let changed = false;
+    while (queue.length && queue[0].time <= now) { current = queue.shift(); changed = true; }
+    if (changed) dots.forEach((d, i) => d.classList.toggle("on", i === current.beat));
+    if (current && !reducedMotion.matches) {
+      const p = Math.min(Math.max((now - current.time) / current.dur, 0), 1);
+      setArm(SWING_DEG * Math.cos(Math.PI * (current.seq + p)));
+    }
+    requestAnimationFrame(draw);
+  }
+
+  async function start() {
+    try {
+      await ensureAudio();
+    } catch (_) {
+      el.tapHint.textContent = "이 브라우저에서는 오디오를 시작할 수 없습니다.";
+      return;
+    }
+    playing = true;
+    beatIdx = 0; seq = 0; current = null; queue.length = 0;
+    nextTime = ctx.currentTime + 0.06;
+    schedule();
+    ticker.start();
+    renderPlay();
+    requestAnimationFrame(draw);
+  }
+
+  function stop() {
+    playing = false;
+    ticker.stop();
+    queue.length = 0;
+    current = null;
+    dots.forEach((d) => d.classList.remove("on"));
+    setArm(0);
+    renderPlay();
+  }
+
+  function toggle() { playing ? stop() : start(); }
+
+  function renderPlay() {
+    el.play.setAttribute("aria-pressed", String(playing));
+    el.playLabel.textContent = playing ? "정지" : "시작";
+    el.playIcon.setAttribute("d", playing ? "M3 3h10v10H3z" : "M4 2.5v11l9-5.5z");
+  }
+
+  // ---- Tap tempo ----
+  let taps = [], tapFlash = null;
+  function tap() {
+    const t = performance.now();
+    if (taps.length && t - taps[taps.length - 1] > 2000) taps = [];
+    taps.push(t);
+    if (taps.length > 8) taps.shift();
+    if (taps.length >= 2) {
+      const avg = (taps[taps.length - 1] - taps[0]) / (taps.length - 1);
+      setBpm(60000 / avg);
+      el.tapHint.textContent = `탭 ${taps.length}회 평균 → ${state.bpm} BPM`;
+    } else {
+      el.tapHint.textContent = "박자에 맞춰 계속 두드리세요";
+    }
+    el.tap.classList.add("hit");
+    clearTimeout(tapFlash);
+    tapFlash = setTimeout(() => el.tap.classList.remove("hit"), 90);
+  }
+
+  // ---- Events ----
+  document.querySelectorAll(".nudge").forEach((b) =>
+    b.addEventListener("click", () => setBpm(state.bpm + Number(b.dataset.step))));
+  el.slider.addEventListener("input", () => setBpm(Number(el.slider.value)));
+  el.bpm.addEventListener("change", () => setBpm(Number(el.bpm.value)));
+  el.bpm.addEventListener("keydown", (e) => { if (e.key === "Enter") el.bpm.blur(); });
+  el.play.addEventListener("click", toggle);
+  el.tap.addEventListener("click", tap);
+  el.sound.addEventListener("click", () => { state.sound = !state.sound; renderSound(); save(); });
+  el.volume.addEventListener("input", () => { state.volume = Number(el.volume.value); applyVolume(); save(); });
+
+  document.addEventListener("keydown", (e) => {
+    if (e.ctrlKey || e.metaKey || e.altKey) return;
+    const tag = e.target.tagName;
+    if (tag === "INPUT" || tag === "TEXTAREA") return;
+    const onButton = tag === "BUTTON";
+    if (e.code === "Space" && !onButton) { e.preventDefault(); toggle(); }
+    else if (e.key === "t" || e.key === "T") { e.preventDefault(); tap(); }
+    else if (e.key === "ArrowUp" || e.key === "ArrowRight") { e.preventDefault(); setBpm(state.bpm + (e.shiftKey ? 5 : 1)); }
+    else if (e.key === "ArrowDown" || e.key === "ArrowLeft") { e.preventDefault(); setBpm(state.bpm - (e.shiftKey ? 5 : 1)); }
+  });
+
+  renderTempo();
+  renderMeters();
+  renderSound();
+  renderPlay();
+  setArm(0);
+})();
+</script>
+</body>
+</html>
