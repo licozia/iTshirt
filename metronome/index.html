@@ -556,12 +556,18 @@
 
   const PRESET_KEY = "pendulum-metronome-presets";
   const EXAMPLE_PRESETS = [
-    { name: "예시 · 스케일 연습", bpm: 72, meter: 2, subdiv: 4, voice: "click" },
-    { name: "예시 · 왈츠", bpm: 138, meter: 1, subdiv: 1, voice: "wood" },
-    { name: "예시 · 6/8 발라드", bpm: 126, meter: 4, subdiv: 1, voice: "hihat" }
+    { name: "예시 · 스케일 연습", bpm: 72, meter: 2, subdiv: 4, voice: "click", grid: null },
+    { name: "예시 · 왈츠", bpm: 138, meter: 1, subdiv: 1, voice: "wood", grid: null },
+    { name: "예시 · 6/8 발라드", bpm: 126, meter: 4, subdiv: 1, voice: "hihat", grid: null },
+    { name: "예시 · 셔플", bpm: 96, meter: 2, subdiv: 3, voice: "click", grid: [1, 0, 4, 2, 0, 4, 2, 0, 4, 2, 0, 4] }
   ];
+  function isValidGrid(g, len) {
+    return Array.isArray(g) && g.length === len && g.every((v) => Number.isInteger(v) && v >= 0 && v < 8);
+  }
+  // grid: undefined = saved before patterns existed (leave grid alone), null = default pattern.
   const isPreset = (p) => p && typeof p.name === "string" && Number.isFinite(p.bpm)
-    && METERS[p.meter] && SUBDIVS.includes(p.subdiv) && VOICE_NAMES[p.voice];
+    && METERS[p.meter] && SUBDIVS.includes(p.subdiv) && VOICE_NAMES[p.voice]
+    && (p.grid == null || isValidGrid(p.grid, METERS[p.meter].n * p.subdiv));
   let presets = EXAMPLE_PRESETS.slice();
   try {
     const raw = localStorage.getItem(PRESET_KEY);
@@ -1095,14 +1101,18 @@
   }
 
   // ---- Presets ----
+  const sameGrid = (a, b) => a.length === b.length && a.every((v, i) => v === b[i]);
   const matchesState = (p) => p.bpm === state.bpm && p.meter === state.meter
-    && p.subdiv === state.subdiv && p.voice === state.voice;
+    && p.subdiv === state.subdiv && p.voice === state.voice
+    && (p.grid === undefined
+      || sameGrid(p.grid || defaultGrid(METERS[p.meter].n, p.subdiv), gridFor(state.meter, state.subdiv)));
 
   function presetMeta(p) {
     const m = METERS[p.meter];
     const parts = [`${p.bpm} BPM`, `${m.n}/${m.d}`];
     if (p.subdiv > 1) parts.push(`박당 ${p.subdiv}클릭`);
     parts.push(VOICE_NAMES[p.voice]);
+    if (p.grid && !sameGrid(p.grid, defaultGrid(m.n, p.subdiv))) parts.push("사용자 패턴");
     return parts.join(" · ");
   }
 
@@ -1172,6 +1182,10 @@
     setBpm(p.bpm);
     state.subdiv = p.subdiv;
     state.voice = p.voice;
+    if (p.grid !== undefined) {
+      const key = gridKey(p.meter, p.subdiv);
+      if (p.grid) state.grids[key] = p.grid.slice(); else delete state.grids[key];
+    }
     setMeter(p.meter);
     renderSound();
     el.presetStatus.textContent = state.trainer.on
@@ -1189,7 +1203,11 @@
     e.preventDefault();
     const m = METERS[state.meter];
     const name = el.presetName.value.trim() || `${state.bpm} BPM ${m.n}/${m.d}`;
-    const preset = { name, bpm: state.bpm, meter: state.meter, subdiv: state.subdiv, voice: state.voice };
+    const custom = state.grids[gridKey(state.meter, state.subdiv)];
+    const preset = {
+      name, bpm: state.bpm, meter: state.meter, subdiv: state.subdiv, voice: state.voice,
+      grid: custom ? custom.slice() : null
+    };
     const existing = presets.findIndex((p) => p.name === name);
     if (existing >= 0) presets[existing] = preset; else presets.push(preset);
     renderPresets();
