@@ -21,6 +21,9 @@
     --beat-on: #33405A;
     --danger: #B42318;
     --on-danger: #FFFFFF;
+    --row-a: #B8741A;
+    --row-b: #D1AA1E;
+    --row-c: #3C8DB5;
     --shadow: 0 1px 2px rgba(20, 28, 40, .06), 0 10px 30px rgba(20, 28, 40, .08);
     --font-num: "Barlow Condensed", "Arial Narrow", "Roboto Condensed", sans-serif;
     --font-ui: "Noto Sans KR", "Malgun Gothic", "Apple SD Gothic Neo", system-ui, sans-serif;
@@ -40,6 +43,9 @@
       --beat-on: #C3CBD8;
       --danger: #F2705F;
       --on-danger: #1F0703;
+      --row-a: #E8963A;
+      --row-b: #E6CB45;
+      --row-c: #79BDDC;
       --shadow: 0 0 0 1px #232833;
     }
   }
@@ -57,10 +63,14 @@
     --beat-on: #C3CBD8;
     --danger: #F2705F;
     --on-danger: #1F0703;
+    --row-a: #E8963A;
+    --row-b: #E6CB45;
+    --row-c: #79BDDC;
     --shadow: 0 0 0 1px #232833;
   }
 
   * { box-sizing: border-box; }
+  [hidden] { display: none !important; }
   html, body { min-height: 100%; }
   body {
     margin: 0;
@@ -142,14 +152,92 @@
   #presetStatus:empty { display: none; }
   .status b { color: var(--ink); font-weight: 700; font-variant-numeric: tabular-nums; }
 
-  .pendulum { display: block; width: 100%; max-width: 260px; height: auto; margin: 0 auto; }
-  .pendulum .scale { stroke: var(--line); stroke-width: 2; stroke-linecap: round; fill: none; }
-  .pendulum .tick { stroke: var(--line); stroke-width: 2; stroke-linecap: round; }
-  .pendulum .tick.mid { stroke: var(--muted); }
-  .pendulum .rod { stroke: var(--ink); stroke-width: 3; stroke-linecap: round; }
-  .pendulum .weight { fill: var(--accent); }
-  .pendulum .pivot { fill: var(--ink); }
-  .pendulum .base { fill: var(--beat-off); }
+  /* Pattern grid: rows A/B/C, one column per click */
+  .mini-grid {
+    display: grid; justify-items: center; gap: 10px;
+    width: 100%;
+    padding: 14px 10px 10px;
+    border: 1px solid var(--line); border-radius: 16px;
+    background: transparent;
+  }
+  .mini-grid:hover { border-color: var(--muted); }
+  .mini-beats { display: flex; justify-content: center; gap: var(--group-gap, 5px); }
+  .mini-beat {
+    display: grid;
+    grid-template-columns: repeat(var(--sub), var(--cell-w));
+    grid-template-rows: repeat(3, var(--cell-h));
+    grid-auto-flow: column;
+    gap: var(--cell-gap, 2px);
+  }
+  .mcell { display: block; border-radius: 2px; background: var(--beat-off); }
+  .mini-hint { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--muted); }
+  .mini-hint svg { width: 13px; height: 13px; fill: currentColor; }
+
+  .mcell.on[data-row="0"], .cell.on[data-row="0"] { background: var(--row-a); }
+  .mcell.on[data-row="1"], .cell.on[data-row="1"] { background: var(--row-b); }
+  .mcell.on[data-row="2"], .cell.on[data-row="2"] { background: var(--row-c); }
+  .mcell.now:not(.on) { background: var(--muted); }
+  .mcell.now.on, .cell.now.on { filter: brightness(1.25) saturate(1.1); }
+
+  .editor {
+    position: fixed; inset: 0; z-index: 10;
+    display: grid; grid-template-rows: auto 1fr auto;
+    background: var(--surface);
+    padding-top: env(safe-area-inset-top, 0px);
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+  }
+  .editor-bar, .editor-foot {
+    display: flex; align-items: center; gap: 12px;
+    padding: 12px 16px;
+  }
+  .editor-bar { border-bottom: 1px solid var(--line); }
+  .editor-foot { border-top: 1px solid var(--line); justify-content: space-between; }
+  .editor-title { flex: 1; min-width: 0; display: grid; }
+  .editor-title h2 { margin: 0; font-size: 16px; font-weight: 700; }
+  .editor-title span { font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
+  .icon-btn {
+    width: 44px; height: 44px; flex: none;
+    display: grid; place-items: center;
+    border: 1px solid var(--line); border-radius: 12px;
+    background: transparent;
+  }
+  .icon-btn svg { width: 18px; height: 18px; fill: currentColor; }
+  .icon-btn:hover { border-color: var(--muted); }
+  .editor-body { overflow: auto; padding: 16px; }
+  .editor-inner { max-width: 760px; margin: 0 auto; display: grid; gap: 16px; }
+  .row-legend { display: flex; flex-wrap: wrap; gap: 8px 16px; font-size: 13px; }
+  .row-legend span { display: inline-flex; align-items: center; gap: 6px; }
+  .row-legend i { width: 14px; height: 14px; border-radius: 3px; display: inline-block; }
+  .row-legend b { font-family: var(--font-num); font-size: 16px; }
+  .edit-lines { display: grid; gap: 18px; }
+  .edit-line { display: flex; gap: var(--block-gap); }
+  .row-labels, .beat-block { display: grid; grid-template-rows: 26px repeat(3, var(--cell)); gap: var(--cell-gap); }
+  .row-labels { width: 16px; }
+  .row-labels span { display: grid; place-items: center; font-family: var(--font-num); font-size: 17px; font-weight: 600; color: var(--muted); }
+  .beat-block { grid-template-columns: repeat(var(--sub), var(--cell)); grid-auto-flow: column; }
+  .beat-num {
+    grid-row: 1; grid-column: 1 / -1;
+    align-self: end;
+    font-family: var(--font-num); font-size: 20px; font-weight: 600; line-height: 1;
+    padding-left: 2px;
+    border-left: 2px solid var(--line);
+  }
+  .cell {
+    width: var(--cell); height: var(--cell);
+    padding: 0;
+    border: 2px solid var(--line); border-radius: 6px;
+    background: transparent;
+    transition: background-color .06s;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .cell:hover { border-color: var(--muted); }
+  .cell.on { border-color: transparent; }
+  .cell.now:not(.on) { background: var(--beat-off); }
+  .editor-note { margin: 0; font-size: 12px; color: var(--muted); }
+  .editor-bpm { display: flex; align-items: center; gap: 8px; font-family: var(--font-num); font-variant-numeric: tabular-nums; }
+  .editor-bpm b { font-size: 26px; font-weight: 600; min-width: 2.2ch; text-align: center; }
+  .editor-bpm small { font-size: 13px; color: var(--muted); letter-spacing: .1em; }
+  .editor-foot .btn { min-width: 132px; }
 
   .tempo { display: grid; justify-items: center; gap: 2px; }
   .marking { font-family: var(--font-num); font-style: italic; font-weight: 500; font-size: 20px; color: var(--accent); min-height: 1.4em; }
@@ -188,37 +276,6 @@
   input[type="range"] { width: 100%; accent-color: var(--accent); margin: 0; }
   .slider-wrap { display: grid; gap: 4px; width: 100%; margin-top: 10px; }
   .slider-scale { display: flex; justify-content: space-between; font-family: var(--font-num); font-size: 13px; color: var(--muted); font-variant-numeric: tabular-nums; }
-
-  .beat-area { display: grid; gap: 8px; }
-  .beats {
-    display: grid;
-    grid-template-columns: repeat(var(--per-row, 4), minmax(0, 48px));
-    justify-content: center;
-    gap: 8px;
-  }
-  .dot {
-    width: 100%; max-width: 100%; aspect-ratio: 1;
-    padding: 0;
-    border-radius: 50%;
-    border: 2px solid var(--line);
-    background: transparent;
-    color: var(--muted);
-    display: grid; place-items: center;
-    font-family: var(--font-num);
-    font-size: 19px; font-weight: 600; line-height: 1;
-    transition: transform .08s ease-out, background-color .08s, border-color .08s;
-    -webkit-tap-highlight-color: transparent;
-  }
-  .dot:hover { border-color: var(--muted); }
-  .dot[data-sound="accent"] { border: 3px solid var(--accent); color: var(--accent); }
-  .dot[data-sound="third"], .dot[data-sound="fifth"] { border-color: var(--beat-on); color: var(--ink); }
-  .dot[data-sound="mute"] { border-style: dashed; color: var(--muted); opacity: .6; }
-  .dot.on { background: var(--beat-on); border-color: var(--beat-on); color: var(--surface); transform: scale(1.08); }
-  .dot.on[data-sound="accent"] { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
-  .dot.on[data-sound="mute"] { background: var(--beat-off); border-color: var(--beat-off); color: var(--muted); }
-  .beat-legend { margin: 0; display: grid; justify-items: center; gap: 2px; text-align: center; font-size: 12px; color: var(--muted); }
-  .beat-legend span span { white-space: nowrap; }
-  .beat-legend b { font-family: var(--font-num); font-size: 14px; font-weight: 600; color: var(--ink); }
 
   .controls { display: grid; grid-template-columns: 1fr 1.6fr; gap: 10px; }
   .btn {
@@ -284,7 +341,7 @@
     .nudge { width: 40px; height: 40px; font-size: 15px; }
   }
   @media (prefers-reduced-motion: reduce) {
-    .dot, .btn, .nudge { transition: none; }
+    .cell, .btn, .nudge { transition: none; }
   }
 </style>
 </head>
@@ -296,16 +353,10 @@
   </header>
 
   <section class="instrument" aria-label="메트로놈">
-    <svg class="pendulum" viewBox="0 0 240 170" role="img" aria-label="진자 표시">
-      <path class="scale" id="scaleArc"></path>
-      <g id="ticks"></g>
-      <rect class="base" x="80" y="156" width="80" height="8" rx="4"></rect>
-      <g id="arm">
-        <line class="rod" x1="120" y1="156" x2="120" y2="30"></line>
-        <rect id="weight" class="weight" x="108" y="80" width="24" height="16" rx="3"></rect>
-      </g>
-      <circle class="pivot" cx="120" cy="156" r="5"></circle>
-    </svg>
+    <button id="miniGrid" class="mini-grid" type="button" aria-label="소리 패턴 편집 열기">
+      <span class="mini-beats" id="miniBeats" aria-hidden="true"></span>
+      <span class="mini-hint"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M11.3 1.3a1 1 0 0 1 1.4 0l2 2a1 1 0 0 1 0 1.4L6 13.4 2 14l.6-4z"></path></svg>눌러서 소리 패턴 편집</span>
+    </button>
 
     <div class="tempo">
       <div class="marking" id="marking" aria-live="polite"></div>
@@ -321,14 +372,6 @@
         <input id="bpmSlider" type="range" min="20" max="300" step="1" value="120" aria-label="템포 슬라이더">
         <div class="slider-scale" aria-hidden="true"><span>20</span><span>60</span><span>120</span><span>180</span><span>240</span><span>300</span></div>
       </div>
-    </div>
-
-    <div class="beat-area">
-      <div class="beats" id="beats" role="group" aria-label="박마다 소리 바꾸기"></div>
-      <p class="beat-legend">
-        <span>동그라미를 누르면 소리가 바뀝니다</span>
-        <span><span><b>&gt;</b> 첫박</span> → <span>보통</span> → <span><b>3</b> 3도</span> → <span><b>5</b> 5도</span> → <span><b>×</b> 음소거</span></span>
-      </p>
     </div>
 
     <div class="controls">
@@ -395,6 +438,41 @@
   </p>
 </main>
 
+<div id="editor" class="editor" role="dialog" aria-modal="true" aria-labelledby="editorTitle" hidden>
+  <div class="editor-bar">
+    <button id="editorClose" class="icon-btn" type="button" aria-label="편집 닫기">
+      <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3.5 2.1 8 6.6l4.5-4.5 1.4 1.4L9.4 8l4.5 4.5-1.4 1.4L8 9.4l-4.5 4.5-1.4-1.4L6.6 8 2.1 3.5z"></path></svg>
+    </button>
+    <div class="editor-title">
+      <h2 id="editorTitle">소리 패턴</h2>
+      <span id="editorMeta"></span>
+    </div>
+    <button id="editorReset" class="btn small" type="button">기본값으로</button>
+  </div>
+  <div class="editor-body">
+    <div class="editor-inner">
+      <div class="row-legend">
+        <span><i style="background: var(--row-a)"></i><b>A</b> 강세</span>
+        <span><i style="background: var(--row-b)"></i><b>B</b> 5도</span>
+        <span><i style="background: var(--row-c)"></i><b>C</b> 3도</span>
+      </div>
+      <div id="editLines" class="edit-lines"></div>
+      <p class="editor-note">칸을 누르면 켜지고 꺼집니다. 한 세로줄에서 여러 행을 켜면 동시에 울리고, 모두 끄면 그 클릭은 쉽니다.</p>
+    </div>
+  </div>
+  <div class="editor-foot">
+    <div class="editor-bpm">
+      <button class="nudge" type="button" data-step="-1" aria-label="1 BPM 느리게">−1</button>
+      <b id="editorBpm">120</b><small>BPM</small>
+      <button class="nudge" type="button" data-step="1" aria-label="1 BPM 빠르게">+1</button>
+    </div>
+    <button id="editorPlay" class="btn primary" type="button" aria-pressed="false">
+      <svg viewBox="0 0 16 16" aria-hidden="true"><path id="editorPlayIcon" d="M4 2.5v11l9-5.5z"></path></svg>
+      <span id="editorPlayLabel">시작</span>
+    </button>
+  </div>
+</div>
+
 <script>
 (() => {
   const MIN_BPM = 20, MAX_BPM = 300;
@@ -419,41 +497,47 @@
     4: { 1: "4분음표", 2: "8분음표", 3: "8분음표 셋잇단", 4: "16분음표", 6: "16분음표 여섯잇단" },
     8: { 1: "8분음표", 2: "16분음표", 3: "16분음표 셋잇단", 4: "32분음표", 6: "32분음표 여섯잇단" }
   };
-  const BEAT_SOUND_NAMES = { accent: "첫박 소리", beat: "보통", third: "3도 높은 음", fifth: "5도 높은 음", mute: "음소거" };
-  const BEAT_SOUND_ORDER = Object.keys(BEAT_SOUND_NAMES);
-  const BEAT_MARKS = { accent: ">", beat: "", third: "3", fifth: "5", mute: "×" };
+  // Grid rows; each grid column stores a bitmask of the rows that sound on that click.
+  const ROWS = [
+    { letter: "A", name: "강세", level: "accent" },
+    { letter: "B", name: "5도", level: "fifth" },
+    { letter: "C", name: "3도", level: "third" }
+  ];
   const VOICE_NAMES = { click: "클릭", wood: "우드블록", cowbell: "카우벨", hihat: "하이햇", beep: "전자음" };
   const STORE_KEY = "pendulum-metronome";
-  const SWING_DEG = 26;
   const LOOKAHEAD = 0.12;
-  const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
 
   const $ = (id) => document.getElementById(id);
   const el = {
     bpm: $("bpm"), slider: $("bpmSlider"), mm: $("mmBpm"), marking: $("marking"),
-    beats: $("beats"), play: $("play"), playLabel: $("playLabel"), playIcon: $("playIcon"),
+    play: $("play"), playLabel: $("playLabel"), playIcon: $("playIcon"),
     tap: $("tap"), tapHint: $("tapHint"), meters: $("meters"),
     subdivs: $("subdivs"), subNote: $("subNote"), voices: $("voices"),
     trToggle: $("trainerToggle"), trLabel: $("trainerLabel"), trStatus: $("trainerStatus"),
     trStart: $("trStart"), trTarget: $("trTarget"), trStep: $("trStep"), trBars: $("trBars"),
     presetForm: $("presetForm"), presetName: $("presetName"), presetList: $("presetList"), presetStatus: $("presetStatus"),
     sound: $("sound"), soundLabel: $("soundLabel"), volume: $("volume"),
-    arm: $("arm"), weight: $("weight"), ticks: $("ticks")
+    miniGrid: $("miniGrid"), miniBeats: $("miniBeats"),
+    editor: $("editor"), editorClose: $("editorClose"), editorReset: $("editorReset"), editorMeta: $("editorMeta"),
+    editLines: $("editLines"), editorBpm: $("editorBpm"),
+    editorPlay: $("editorPlay"), editorPlayIcon: $("editorPlayIcon"), editorPlayLabel: $("editorPlayLabel")
   };
 
   const TRAINER_LIMITS = { start: [MIN_BPM, MAX_BPM], target: [MIN_BPM, MAX_BPM], step: [1, 50], bars: [1, 64] };
   const state = {
     bpm: 120, meter: 2, subdiv: 1, sound: true, volume: 80, voice: "click",
     trainer: { on: false, start: 80, target: 120, step: 4, bars: 4 },
-    patterns: {}
+    grids: {}
   };
   const clampInt = (v, [lo, hi]) => Math.min(hi, Math.max(lo, Math.round(v)));
   try {
     const saved = JSON.parse(localStorage.getItem(STORE_KEY) || "{}");
-    if (saved.patterns && typeof saved.patterns === "object") {
-      for (const [k, p] of Object.entries(saved.patterns)) {
-        const m = METERS[k];
-        if (m && Array.isArray(p) && p.length === m.n && p.every((s) => BEAT_SOUND_NAMES[s])) state.patterns[k] = p;
+    if (saved.grids && typeof saved.grids === "object") {
+      for (const [k, g] of Object.entries(saved.grids)) {
+        const [mi, sub] = k.split(":").map(Number);
+        const valid = METERS[mi] && SUBDIVS.includes(sub) && Array.isArray(g)
+          && g.length === METERS[mi].n * sub && g.every((v) => Number.isInteger(v) && v >= 0 && v < 8);
+        if (valid) state.grids[k] = g;
       }
     }
     if (saved.trainer && typeof saved.trainer === "object") {
@@ -490,45 +574,17 @@
   }
   function clampBpm(v) { return Math.min(MAX_BPM, Math.max(MIN_BPM, Math.round(v))); }
 
-  // Pendulum scale ticks
-  for (let deg = -SWING_DEG; deg <= SWING_DEG; deg += SWING_DEG / 4) {
-    const r = Math.PI * deg / 180;
-    const x1 = 120 + 140 * Math.sin(r), y1 = 156 - 140 * Math.cos(r);
-    const len = deg === 0 ? 12 : 7;
-    const x2 = 120 + (140 - len) * Math.sin(r), y2 = 156 - (140 - len) * Math.cos(r);
-    const line = document.createElementNS("http://www.w3.org/2000/svg", "line");
-    line.setAttribute("class", deg === 0 ? "tick mid" : "tick");
-    line.setAttribute("x1", x1.toFixed(1)); line.setAttribute("y1", y1.toFixed(1));
-    line.setAttribute("x2", x2.toFixed(1)); line.setAttribute("y2", y2.toFixed(1));
-    el.ticks.appendChild(line);
-  }
-  {
-    const r = 124, a = Math.PI * (SWING_DEG + 4) / 180;
-    const x = (120 - r * Math.sin(a)).toFixed(1), x2 = (120 + r * Math.sin(a)).toFixed(1);
-    const y = (156 - r * Math.cos(a)).toFixed(1);
-    $("scaleArc").setAttribute("d", `M ${x} ${y} A ${r} ${r} 0 0 1 ${x2} ${y}`);
-  }
-
-  function setArm(deg) { el.arm.setAttribute("transform", `rotate(${deg.toFixed(2)} 120 156)`); }
-
-  // Like a real metronome: the weight slides up the rod for slower tempos.
-  function placeWeight() {
-    const t = (state.bpm - MIN_BPM) / (MAX_BPM - MIN_BPM);
-    const y = 36 + t * 92;
-    el.weight.setAttribute("y", y.toFixed(1));
-  }
-
   function renderTempo() {
     el.bpm.value = state.bpm;
     el.slider.value = state.bpm;
     el.mm.textContent = state.bpm;
+    el.editorBpm.textContent = state.bpm;
     const m = MARKINGS.find(([limit]) => state.bpm < limit);
     el.marking.innerHTML = "";
     el.marking.append(m[1]);
     const gloss = document.createElement("span");
     gloss.textContent = m[2];
     el.marking.append(gloss);
-    placeWeight();
   }
 
   function setBpm(v) {
@@ -538,7 +594,6 @@
     save();
   }
 
-  let dots = [];
   function renderMeters() {
     el.meters.innerHTML = "";
     METERS.forEach((m, i) => {
@@ -550,46 +605,166 @@
       b.addEventListener("click", () => setMeter(i));
       el.meters.appendChild(b);
     });
-    renderBeats();
+    renderGrids();
   }
 
-  function beatPattern() {
-    const n = METERS[state.meter].n;
-    return state.patterns[state.meter] || Array.from({ length: n }, (_, i) => (i === 0 ? "accent" : "beat"));
+  // ---- Sound pattern grid ----
+  const gridKey = (meter, sub) => `${meter}:${sub}`;
+  function defaultGrid(n, sub) {
+    // Downbeat on A, other beats on B, subdivision clicks on C.
+    return Array.from({ length: n * sub }, (_, j) => (j % sub ? 4 : j === 0 ? 1 : 2));
+  }
+  function gridFor(meter, sub) {
+    return state.grids[gridKey(meter, sub)] || defaultGrid(METERS[meter].n, sub);
   }
 
-  function paintDot(d, i, sound) {
-    d.dataset.sound = sound;
-    d.textContent = BEAT_MARKS[sound];
-    d.setAttribute("aria-label", `${i + 1}박: ${BEAT_SOUND_NAMES[sound]}. 눌러서 바꾸기`);
-  }
+  let miniCells = [], editCells = [], nowCol = -1;
 
-  function renderBeats() {
-    const n = METERS[state.meter].n;
-    // Up to 7 per row; larger meters split into even rows (12/8 -> 6 + 6).
-    el.beats.style.setProperty("--per-row", n <= 7 ? n : Math.ceil(n / Math.ceil(n / 7)));
-    el.beats.innerHTML = "";
-    const pattern = beatPattern();
-    dots = pattern.map((sound, i) => {
-      const d = document.createElement("button");
-      d.type = "button";
-      d.className = "dot";
-      paintDot(d, i, sound);
-      d.addEventListener("click", () => cycleBeat(i));
-      el.beats.appendChild(d);
-      return d;
+  function paintColumn(col) {
+    const mask = gridFor(state.meter, state.subdiv)[col];
+    const sub = state.subdiv;
+    ROWS.forEach((row, r) => {
+      const on = (mask & (1 << r)) !== 0;
+      if (miniCells[col]) miniCells[col][r].classList.toggle("on", on);
+      const c = editCells[col] && editCells[col][r];
+      if (c) {
+        c.classList.toggle("on", on);
+        c.setAttribute("aria-pressed", String(on));
+        c.setAttribute("aria-label", `${Math.floor(col / sub) + 1}박 ${col % sub + 1}번째 클릭, ${row.letter} ${row.name}`);
+      }
     });
   }
 
-  async function cycleBeat(i) {
-    const pattern = beatPattern().slice();
-    pattern[i] = BEAT_SOUND_ORDER[(BEAT_SOUND_ORDER.indexOf(pattern[i]) + 1) % BEAT_SOUND_ORDER.length];
-    state.patterns[state.meter] = pattern;
-    paintDot(dots[i], i, pattern[i]);
+  function setNow(col) {
+    for (const cells of [miniCells[nowCol], editCells[nowCol]]) cells && cells.forEach((c) => c.classList.remove("now"));
+    nowCol = col;
+    for (const cells of [miniCells[col], editCells[col]]) cells && cells.forEach((c) => c.classList.add("now"));
+  }
+
+  function renderMini() {
+    const n = METERS[state.meter].n, sub = state.subdiv, total = n * sub;
+    const gap = total > 24 ? 1 : 2, groupGap = total > 24 ? 3 : 6;
+    const width = el.miniGrid.clientWidth - 20;
+    const cellW = Math.max(3, Math.min(18, Math.floor((width - (n - 1) * groupGap - n * (sub - 1) * gap) / total)));
+    el.miniBeats.style.setProperty("--cell-w", `${cellW}px`);
+    el.miniBeats.style.setProperty("--cell-h", `${Math.max(10, Math.min(cellW, 18))}px`);
+    el.miniBeats.style.setProperty("--cell-gap", `${gap}px`);
+    el.miniBeats.style.setProperty("--group-gap", `${groupGap}px`);
+    el.miniBeats.innerHTML = "";
+    miniCells = [];
+    for (let b = 0; b < n; b++) {
+      const block = document.createElement("span");
+      block.className = "mini-beat";
+      block.style.setProperty("--sub", sub);
+      for (let k = 0; k < sub; k++) {
+        miniCells.push(ROWS.map((_, r) => {
+          const c = document.createElement("span");
+          c.className = "mcell";
+          c.dataset.row = r;
+          block.appendChild(c);
+          return c;
+        }));
+      }
+      el.miniBeats.appendChild(block);
+    }
+  }
+
+  function renderEditor() {
+    const m = METERS[state.meter], n = m.n, sub = state.subdiv;
+    el.editorMeta.textContent = `${m.n}/${m.d} · 박당 ${sub}클릭`;
+    const gap = 4, blockGap = 12, labelW = 16;
+    const width = el.editLines.clientWidth;
+    // Fit as many beats per line as keeps cells comfortably tappable.
+    let perLine = 1, cell = 34;
+    for (let bp = n; bp >= 1; bp--) {
+      const c = Math.floor((width - labelW - bp * blockGap - bp * (sub - 1) * gap) / (bp * sub));
+      if (c >= 34 || bp === 1) { perLine = bp; cell = Math.max(28, Math.min(56, c)); break; }
+    }
+    el.editLines.style.setProperty("--cell", `${cell}px`);
+    el.editLines.style.setProperty("--cell-gap", `${gap}px`);
+    el.editLines.style.setProperty("--block-gap", `${blockGap}px`);
+    el.editLines.innerHTML = "";
+    editCells = [];
+    for (let start = 0; start < n; start += perLine) {
+      const line = document.createElement("div");
+      line.className = "edit-line";
+      const labels = document.createElement("div");
+      labels.className = "row-labels";
+      labels.setAttribute("aria-hidden", "true");
+      labels.appendChild(document.createElement("span"));
+      ROWS.forEach((row) => {
+        const s = document.createElement("span");
+        s.textContent = row.letter;
+        labels.appendChild(s);
+      });
+      line.appendChild(labels);
+      for (let b = start; b < Math.min(n, start + perLine); b++) {
+        const block = document.createElement("div");
+        block.className = "beat-block";
+        block.style.setProperty("--sub", sub);
+        const num = document.createElement("div");
+        num.className = "beat-num";
+        num.textContent = b + 1;
+        block.appendChild(num);
+        for (let k = 0; k < sub; k++) {
+          const col = b * sub + k;
+          editCells[col] = ROWS.map((_, r) => {
+            const c = document.createElement("button");
+            c.type = "button";
+            c.className = "cell";
+            c.dataset.row = r;
+            c.addEventListener("click", () => toggleCell(col, r));
+            block.appendChild(c);
+            return c;
+          });
+        }
+        line.appendChild(block);
+      }
+      el.editLines.appendChild(line);
+    }
+  }
+
+  function renderGrids() {
+    renderMini();
+    if (!el.editor.hidden) renderEditor();
+    else editCells = [];
+    const total = METERS[state.meter].n * state.subdiv;
+    for (let col = 0; col < total; col++) paintColumn(col);
+    if (nowCol >= total) nowCol = -1;
+    if (nowCol >= 0) setNow(nowCol);
+  }
+
+  async function toggleCell(col, r) {
+    const key = gridKey(state.meter, state.subdiv);
+    const grid = gridFor(state.meter, state.subdiv).slice();
+    grid[col] ^= 1 << r;
+    state.grids[key] = grid;
+    paintColumn(col);
     save();
-    if (playing || !state.sound || pattern[i] === "mute") return;
+    if (playing || !state.sound || !(grid[col] & (1 << r))) return;
     try { await ensureAudio(); } catch (_) { return; }
-    click(ctx.currentTime + 0.02, pattern[i]);
+    click(ctx.currentTime + 0.02, ROWS[r].level);
+  }
+
+  function resetGrid() {
+    delete state.grids[gridKey(state.meter, state.subdiv)];
+    const total = METERS[state.meter].n * state.subdiv;
+    for (let col = 0; col < total; col++) paintColumn(col);
+    save();
+  }
+
+  function openEditor() {
+    el.editor.hidden = false;
+    document.body.style.overflow = "hidden";
+    renderGrids();
+    el.editorClose.focus();
+  }
+
+  function closeEditor() {
+    el.editor.hidden = true;
+    document.body.style.overflow = "";
+    renderGrids();
+    el.miniGrid.focus();
   }
 
   function setMeter(i) {
@@ -619,6 +794,7 @@
   function setSubdiv(n) {
     state.subdiv = n;
     renderSubdivs();
+    renderGrids();
     save();
   }
 
@@ -669,10 +845,8 @@
   // [pitch multiplier, peak gain] per click role
   const LEVELS = {
     accent: [2, 1],
-    beat: [1, 0.62],
-    third: [Math.pow(2, 4 / 12), 0.62],
     fifth: [Math.pow(2, 7 / 12), 0.62],
-    sub: [0.8, 0.3]
+    third: [Math.pow(2, 4 / 12), 0.62]
   };
 
   function envelope(time, peak, decay) {
@@ -725,11 +899,11 @@
       tone("square", 540 * p, time, bp, 0.22);
       tone("square", 800 * p, time, bp, 0.22);
     },
-    hihat(time, p, peak) {
+    hihat(time, p, peak, accent) {
       const hp = ctx.createBiquadFilter();
       hp.type = "highpass";
       hp.frequency.value = Math.min(6500 * p, 16000);
-      hp.connect(envelope(time, peak * 0.85, peak === 1 ? 0.12 : 0.05));
+      hp.connect(envelope(time, peak * 0.85, accent ? 0.12 : 0.05));
       noise(time, hp, 0.14);
     },
     beep(time, p, peak) {
@@ -743,31 +917,37 @@
     }
   };
 
-  function click(time, level) {
+  function click(time, level, scale = 1) {
     const [p, peak] = LEVELS[level];
-    VOICES[state.voice](time, p, peak);
+    VOICES[state.voice](time, p, peak * scale, level === "accent");
+  }
+
+  function playColumn(time, mask) {
+    const levels = ROWS.filter((_, r) => mask & (1 << r)).map((row) => row.level);
+    // Scale stacked sounds so a full column stays below clipping.
+    levels.forEach((level) => click(time, level, 1 / levels.length));
   }
 
   let playing = false, nextTime = 0, beatIdx = 0, subIdx = 0, seq = 0;
-  let curBeat = 0, curSub = 1, curBeatDur = 0.5;
+  let curBeat = 0, curSub = 1, curBeatDur = 0.5, curMeter = 0;
   const queue = [];
 
-  // Tempo, meter and subdivision changes take effect at the next beat boundary.
+  // Tempo, meter and subdivision changes take effect at the next beat boundary;
+  // grid edits apply from the very next click.
   function schedule() {
     if (!playing) return;
     while (nextTime < ctx.currentTime + LOOKAHEAD) {
       if (subIdx === 0) {
-        const n = METERS[state.meter].n;
-        curBeat = beatIdx % n;
+        curMeter = state.meter;
+        curBeat = beatIdx % METERS[curMeter].n;
         if (curBeat === 0 && seq > 0) onBarStart();
         curSub = state.subdiv;
         curBeatDur = 60 / state.bpm;
-        const sound = beatPattern()[curBeat];
-        if (state.sound && sound !== "mute") click(nextTime, sound);
-        queue.push({ time: nextTime, beat: curBeat, dur: curBeatDur, seq: seq++ });
-      } else if (state.sound) {
-        click(nextTime, "sub");
+        seq++;
       }
+      const col = curBeat * curSub + subIdx;
+      if (state.sound) playColumn(nextTime, gridFor(curMeter, curSub)[col]);
+      queue.push({ time: nextTime, col, meter: curMeter, sub: curSub });
       nextTime += curBeatDur / curSub;
       if (++subIdx >= curSub) { subIdx = 0; beatIdx = curBeat + 1; }
     }
@@ -804,10 +984,9 @@
     const now = ctx.currentTime - (ctx.outputLatency || ctx.baseLatency || 0);
     let changed = false;
     while (queue.length && queue[0].time <= now) { current = queue.shift(); changed = true; }
-    if (changed) dots.forEach((d, i) => d.classList.toggle("on", i === current.beat));
-    if (current && !reducedMotion.matches) {
-      const p = Math.min(Math.max((now - current.time) / current.dur, 0), 1);
-      setArm(SWING_DEG * Math.cos(Math.PI * (current.seq + p)));
+    if (changed) {
+      const shown = current.meter === state.meter && current.sub === state.subdiv;
+      setNow(shown ? current.col : -1);
     }
     requestAnimationFrame(draw);
   }
@@ -880,8 +1059,7 @@
     ticker.stop();
     queue.length = 0;
     current = null;
-    dots.forEach((d) => d.classList.remove("on"));
-    setArm(0);
+    setNow(-1);
     renderPlay();
     renderTrainerStatus();
   }
@@ -889,9 +1067,12 @@
   function toggle() { playing ? stop() : start(); }
 
   function renderPlay() {
-    el.play.setAttribute("aria-pressed", String(playing));
-    el.playLabel.textContent = playing ? "정지" : "시작";
-    el.playIcon.setAttribute("d", playing ? "M3 3h10v10H3z" : "M4 2.5v11l9-5.5z");
+    const icon = playing ? "M3 3h10v10H3z" : "M4 2.5v11l9-5.5z";
+    for (const [btn, label, path] of [[el.play, el.playLabel, el.playIcon], [el.editorPlay, el.editorPlayLabel, el.editorPlayIcon]]) {
+      btn.setAttribute("aria-pressed", String(playing));
+      label.textContent = playing ? "정지" : "시작";
+      path.setAttribute("d", icon);
+    }
   }
 
   // ---- Tap tempo ----
@@ -1025,6 +1206,15 @@
   el.bpm.addEventListener("change", () => setBpm(Number(el.bpm.value)));
   el.bpm.addEventListener("keydown", (e) => { if (e.key === "Enter") el.bpm.blur(); });
   el.play.addEventListener("click", toggle);
+  el.editorPlay.addEventListener("click", toggle);
+  el.miniGrid.addEventListener("click", openEditor);
+  el.editorClose.addEventListener("click", closeEditor);
+  el.editorReset.addEventListener("click", resetGrid);
+  let resizeTimer = null;
+  window.addEventListener("resize", () => {
+    clearTimeout(resizeTimer);
+    resizeTimer = setTimeout(renderGrids, 100);
+  });
   el.tap.addEventListener("click", tap);
   el.sound.addEventListener("click", () => { state.sound = !state.sound; renderSound(); save(); });
   el.volume.addEventListener("input", () => { state.volume = Number(el.volume.value); applyVolume(); save(); });
@@ -1046,6 +1236,7 @@
 
   document.addEventListener("keydown", (e) => {
     if (e.ctrlKey || e.metaKey || e.altKey) return;
+    if (e.key === "Escape" && !el.editor.hidden) { e.preventDefault(); closeEditor(); return; }
     const tag = e.target.tagName;
     if (tag === "INPUT" || tag === "TEXTAREA") return;
     const onButton = tag === "BUTTON";
@@ -1062,7 +1253,6 @@
   renderTrainer();
   renderPresets();
   renderPlay();
-  setArm(0);
 })();
 </script>
 </body>
