@@ -1,0 +1,1277 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Pendulum Metronome</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:ital,wght@0,500;0,600;1,500&family=Noto+Sans+KR:wght@400;500;700&display=swap">
+<style>
+  :root {
+    --bg: #E8EBEF;
+    --surface: #F9FAFB;
+    --ink: #19202D;
+    --muted: #5A6476;
+    --line: #CBD2DB;
+    --accent: #95600F;
+    --accent-soft: #F1E3C8;
+    --on-accent: #FFFFFF;
+    --beat-off: #D4D9E0;
+    --beat-on: #33405A;
+    --danger: #B42318;
+    --on-danger: #FFFFFF;
+    --row-a: #B8741A;
+    --row-b: #D1AA1E;
+    --row-c: #3C8DB5;
+    --shadow: 0 1px 2px rgba(20, 28, 40, .06), 0 10px 30px rgba(20, 28, 40, .08);
+    --font-num: "Barlow Condensed", "Arial Narrow", "Roboto Condensed", sans-serif;
+    --font-ui: "Noto Sans KR", "Malgun Gothic", "Apple SD Gothic Neo", system-ui, sans-serif;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      color-scheme: dark;
+      --bg: #0F1217;
+      --surface: #181C24;
+      --ink: #E5E8ED;
+      --muted: #8D97A8;
+      --line: #2B313C;
+      --accent: #E2A53F;
+      --accent-soft: #3A2C14;
+      --on-accent: #1C1405;
+      --beat-off: #2C323D;
+      --beat-on: #C3CBD8;
+      --danger: #F2705F;
+      --on-danger: #1F0703;
+      --row-a: #E8963A;
+      --row-b: #E6CB45;
+      --row-c: #79BDDC;
+      --shadow: 0 0 0 1px #232833;
+    }
+  }
+  :root[data-theme="dark"] {
+    color-scheme: dark;
+    --bg: #0F1217;
+    --surface: #181C24;
+    --ink: #E5E8ED;
+    --muted: #8D97A8;
+    --line: #2B313C;
+    --accent: #E2A53F;
+    --accent-soft: #3A2C14;
+    --on-accent: #1C1405;
+    --beat-off: #2C323D;
+    --beat-on: #C3CBD8;
+    --danger: #F2705F;
+    --on-danger: #1F0703;
+    --row-a: #E8963A;
+    --row-b: #E6CB45;
+    --row-c: #79BDDC;
+    --shadow: 0 0 0 1px #232833;
+  }
+
+  * { box-sizing: border-box; }
+  [hidden] { display: none !important; }
+  html, body { min-height: 100%; }
+  body {
+    margin: 0;
+    padding-inline: 16px;
+    background: var(--bg);
+    color: var(--ink);
+    font-family: var(--font-ui);
+    font-size: 14px;
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+  }
+  button, input { font: inherit; color: inherit; }
+  button { cursor: pointer; }
+  :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+  .app {
+    max-width: 440px;
+    margin: 0 auto;
+    padding-block: 28px 36px;
+    display: grid;
+    gap: 16px;
+  }
+
+  .top { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
+  .top h1 { margin: 0; font-size: 15px; font-weight: 700; letter-spacing: .01em; }
+  .mm { font-family: var(--font-num); font-size: 18px; color: var(--muted); font-variant-numeric: tabular-nums; }
+  .mm b { color: var(--ink); font-weight: 600; }
+
+  .instrument, .panel {
+    background: var(--surface);
+    border-radius: 22px;
+    box-shadow: var(--shadow);
+    padding: 20px 20px 22px;
+    display: grid;
+    gap: 18px;
+  }
+  .panel { gap: 14px; }
+  .panel-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+  .panel h2 { margin: 0; font-size: 15px; font-weight: 700; }
+  .num-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+  .num-field { display: grid; gap: 6px; }
+  .num-field input, .text-input {
+    height: 42px; width: 100%; min-width: 0;
+    border: 1px solid var(--line); border-radius: 10px;
+    background: transparent;
+    padding: 0 12px;
+  }
+  .num-field input {
+    font-family: var(--font-num); font-size: 20px; font-weight: 600;
+    font-variant-numeric: tabular-nums;
+  }
+  .num-field input:disabled { opacity: .5; }
+  .text-input { font-size: 14px; }
+  .text-input::placeholder { color: var(--muted); }
+  .preset-form { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; }
+  .btn.small { height: 42px; font-size: 14px; padding: 0 14px; border-radius: 10px; }
+  .preset-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+  .preset-list li { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 6px; }
+  .preset-list li.empty { display: block; font-size: 13px; color: var(--muted); padding: 4px 0; }
+  .preset-load {
+    display: grid; gap: 1px; text-align: left;
+    padding: 9px 12px;
+    border: 1px solid var(--line); border-radius: 12px;
+    background: transparent;
+  }
+  .preset-load:hover { border-color: var(--muted); }
+  .preset-load .name { font-weight: 700; overflow-wrap: anywhere; }
+  .preset-load .meta { font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
+  .preset-list li.active .preset-load { border-color: var(--accent); background: var(--accent-soft); }
+  .preset-del {
+    min-width: 52px; padding: 0 10px;
+    border: 1px solid var(--line); border-radius: 12px;
+    background: transparent; color: var(--muted);
+    font-size: 12px; font-weight: 500;
+  }
+  .preset-del:hover { color: var(--ink); border-color: var(--muted); }
+  .preset-del.confirm { background: var(--danger); border-color: var(--danger); color: var(--on-danger); }
+  .status { margin: 0; font-size: 13px; color: var(--muted); min-height: 1.5em; }
+  #presetStatus:empty { display: none; }
+  .status b { color: var(--ink); font-weight: 700; font-variant-numeric: tabular-nums; }
+
+  /* Pattern grid: rows A/B/C, one column per click */
+  .mini-grid {
+    display: grid; justify-items: center; gap: 10px;
+    width: 100%;
+    padding: 14px 10px 10px;
+    border: 1px solid var(--line); border-radius: 16px;
+    background: transparent;
+  }
+  .mini-grid:hover { border-color: var(--muted); }
+  .mini-beats { display: flex; justify-content: center; gap: var(--group-gap, 5px); }
+  .mini-beat {
+    display: grid;
+    grid-template-columns: repeat(var(--sub), var(--cell-w));
+    grid-template-rows: repeat(3, var(--cell-h));
+    grid-auto-flow: column;
+    gap: var(--cell-gap, 2px);
+  }
+  .mcell { display: block; border-radius: 2px; background: var(--beat-off); }
+  .mini-hint { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--muted); }
+  .mini-hint svg { width: 13px; height: 13px; fill: currentColor; }
+
+  .mcell.on[data-row="0"], .cell.on[data-row="0"] { background: var(--row-a); }
+  .mcell.on[data-row="1"], .cell.on[data-row="1"] { background: var(--row-b); }
+  .mcell.on[data-row="2"], .cell.on[data-row="2"] { background: var(--row-c); }
+  .mcell.now:not(.on) { background: var(--muted); }
+  .mcell.now.on, .cell.now.on { filter: brightness(1.25) saturate(1.1); }
+
+  .editor {
+    position: fixed; inset: 0; z-index: 10;
+    display: grid; grid-template-rows: auto 1fr auto;
+    background: var(--surface);
+    padding-top: env(safe-area-inset-top, 0px);
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+  }
+  .editor-bar, .editor-foot {
+    display: flex; align-items: center; gap: 12px;
+    padding: 12px 16px;
+  }
+  .editor-bar { border-bottom: 1px solid var(--line); }
+  .editor-foot { border-top: 1px solid var(--line); justify-content: space-between; }
+  .editor-title { flex: 1; min-width: 0; display: grid; }
+  .editor-title h2 { margin: 0; font-size: 16px; font-weight: 700; }
+  .editor-title span { font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
+  .icon-btn {
+    width: 44px; height: 44px; flex: none;
+    display: grid; place-items: center;
+    border: 1px solid var(--line); border-radius: 12px;
+    background: transparent;
+  }
+  .icon-btn svg { width: 18px; height: 18px; fill: currentColor; }
+  .icon-btn:hover { border-color: var(--muted); }
+  .editor-body { overflow: auto; padding: 16px; }
+  .editor-inner { max-width: 760px; margin: 0 auto; display: grid; gap: 16px; }
+  .row-legend { display: flex; flex-wrap: wrap; gap: 8px 16px; font-size: 13px; }
+  .row-legend span { display: inline-flex; align-items: center; gap: 6px; }
+  .row-legend i { width: 14px; height: 14px; border-radius: 3px; display: inline-block; }
+  .row-legend b { font-family: var(--font-num); font-size: 16px; }
+  .edit-lines { display: grid; gap: 18px; }
+  .edit-line { display: flex; gap: var(--block-gap); }
+  .row-labels, .beat-block { display: grid; grid-template-rows: 26px repeat(3, var(--cell)); gap: var(--cell-gap); }
+  .row-labels { width: 16px; }
+  .row-labels span { display: grid; place-items: center; font-family: var(--font-num); font-size: 17px; font-weight: 600; color: var(--muted); }
+  .beat-block { grid-template-columns: repeat(var(--sub), var(--cell)); grid-auto-flow: column; }
+  .beat-num {
+    grid-row: 1; grid-column: 1 / -1;
+    align-self: end;
+    font-family: var(--font-num); font-size: 20px; font-weight: 600; line-height: 1;
+    padding-left: 2px;
+    border-left: 2px solid var(--line);
+  }
+  .cell {
+    width: var(--cell); height: var(--cell);
+    padding: 0;
+    border: 2px solid var(--line); border-radius: 6px;
+    background: transparent;
+    transition: background-color .06s;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .cell:hover { border-color: var(--muted); }
+  .cell.on { border-color: transparent; }
+  .cell.now:not(.on) { background: var(--beat-off); }
+  .editor-note { margin: 0; font-size: 12px; color: var(--muted); }
+  .editor-bpm { display: flex; align-items: center; gap: 8px; font-family: var(--font-num); font-variant-numeric: tabular-nums; }
+  .editor-bpm b { font-size: 26px; font-weight: 600; min-width: 2.2ch; text-align: center; }
+  .editor-bpm small { font-size: 13px; color: var(--muted); letter-spacing: .1em; }
+  .editor-foot .btn { min-width: 132px; }
+
+  .tempo { display: grid; justify-items: center; gap: 2px; }
+  .marking { font-family: var(--font-num); font-style: italic; font-weight: 500; font-size: 20px; color: var(--accent); min-height: 1.4em; }
+  .marking span { font-family: var(--font-ui); font-style: normal; font-size: 13px; color: var(--muted); margin-left: 6px; }
+  .bpm-row { display: flex; align-items: center; justify-content: center; gap: 8px; width: 100%; }
+  .nudge {
+    width: 44px; height: 44px; flex: none;
+    border-radius: 50%;
+    border: 1px solid var(--line);
+    background: transparent;
+    font-family: var(--font-num);
+    font-size: 17px; font-weight: 600;
+    font-variant-numeric: tabular-nums;
+    transition: background-color .12s, border-color .12s;
+  }
+  .nudge:hover { background: var(--bg); border-color: var(--muted); }
+  .nudge:active { transform: translateY(1px); }
+  #bpm {
+    width: 3.1ch;
+    min-width: 0;
+    border: none;
+    background: transparent;
+    text-align: center;
+    font-family: var(--font-num);
+    font-weight: 600;
+    font-size: clamp(64px, 20vw, 92px);
+    line-height: 1;
+    font-variant-numeric: tabular-nums;
+    padding: 0;
+    border-radius: 8px;
+    -moz-appearance: textfield;
+    appearance: textfield;
+  }
+  #bpm::-webkit-outer-spin-button, #bpm::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+  .unit { font-size: 12px; font-weight: 500; letter-spacing: .14em; color: var(--muted); }
+  input[type="range"] { width: 100%; accent-color: var(--accent); margin: 0; }
+  .slider-wrap { display: grid; gap: 4px; width: 100%; margin-top: 10px; }
+  .slider-scale { display: flex; justify-content: space-between; font-family: var(--font-num); font-size: 13px; color: var(--muted); font-variant-numeric: tabular-nums; }
+
+  .controls { display: grid; grid-template-columns: 1fr 1.6fr; gap: 10px; }
+  .btn {
+    height: 56px;
+    border-radius: 14px;
+    border: 1px solid var(--line);
+    background: transparent;
+    font-weight: 700;
+    font-size: 16px;
+    display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+    transition: background-color .12s, transform .06s;
+  }
+  .btn:hover { background: var(--bg); }
+  .btn:active { transform: translateY(1px); }
+  .btn.primary { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
+  .btn.primary:hover { filter: brightness(1.06); background: var(--accent); }
+  .btn svg { width: 16px; height: 16px; fill: currentColor; }
+  #tap.hit { background: var(--accent-soft); }
+  .tap-hint { font-size: 12px; color: var(--muted); text-align: center; min-height: 1.5em; margin-top: -8px; }
+
+  .settings { display: grid; gap: 14px; border-top: 1px solid var(--line); padding-top: 16px; }
+  .field { display: grid; gap: 8px; }
+  .label { font-size: 12px; font-weight: 500; color: var(--muted); letter-spacing: .04em; }
+  .label-note { color: var(--ink); font-weight: 500; letter-spacing: 0; margin-left: 6px; }
+  .chips { display: grid; grid-template-columns: repeat(var(--cols, 7), minmax(0, 1fr)); gap: 6px; }
+  .chip {
+    min-width: 0; height: 36px; padding: 0;
+    border-radius: 10px;
+    border: 1px solid var(--line);
+    background: transparent;
+    font-family: var(--font-num);
+    font-size: 18px; font-weight: 600;
+    font-variant-numeric: tabular-nums;
+  }
+  .chip.word { font-family: var(--font-ui); font-size: 13px; font-weight: 500; }
+  .chip:hover { border-color: var(--muted); }
+  .chip[aria-pressed="true"] { background: var(--ink); border-color: var(--ink); color: var(--surface); }
+  .sound-row { display: grid; grid-template-columns: auto 1fr; align-items: center; gap: 14px; }
+  .toggle {
+    display: inline-flex; align-items: center; gap: 8px;
+    height: 36px; padding: 0 12px 0 6px;
+    border-radius: 999px;
+    border: 1px solid var(--line);
+    background: transparent;
+    font-size: 13px; font-weight: 500;
+  }
+  .toggle .knob { width: 26px; height: 26px; border-radius: 50%; background: var(--beat-off); display: grid; place-items: center; }
+  .toggle .knob svg { width: 14px; height: 14px; fill: var(--muted); }
+  .toggle[aria-pressed="true"] .knob { background: var(--accent); }
+  .toggle[aria-pressed="true"] .knob svg { fill: var(--on-accent); }
+  #volume:disabled { opacity: .4; }
+
+  .keys { margin: 0; font-size: 12px; color: var(--muted); text-align: center; line-height: 2; }
+  kbd {
+    font-family: var(--font-num); font-size: 13px; font-weight: 600;
+    padding: 1px 6px; border-radius: 5px;
+    border: 1px solid var(--line); background: var(--surface); color: var(--ink);
+  }
+
+  @media (max-width: 380px) {
+    .instrument { padding: 16px 14px 18px; }
+    .bpm-row { gap: 4px; }
+    .nudge { width: 40px; height: 40px; font-size: 15px; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .cell, .btn, .nudge { transition: none; }
+  }
+</style>
+</head>
+<body>
+<main class="app">
+  <header class="top">
+    <h1>펜듈럼 메트로놈</h1>
+    <span class="mm" aria-hidden="true">M.M. ♩ = <b id="mmBpm">120</b></span>
+  </header>
+
+  <section class="instrument" aria-label="메트로놈">
+    <button id="miniGrid" class="mini-grid" type="button" aria-label="소리 패턴 편집 열기">
+      <span class="mini-beats" id="miniBeats" aria-hidden="true"></span>
+      <span class="mini-hint"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M11.3 1.3a1 1 0 0 1 1.4 0l2 2a1 1 0 0 1 0 1.4L6 13.4 2 14l.6-4z"></path></svg>눌러서 소리 패턴 편집</span>
+    </button>
+
+    <div class="tempo">
+      <div class="marking" id="marking" aria-live="polite"></div>
+      <div class="bpm-row">
+        <button class="nudge" type="button" data-step="-5" aria-label="5 BPM 느리게">−5</button>
+        <button class="nudge" type="button" data-step="-1" aria-label="1 BPM 느리게">−1</button>
+        <input id="bpm" type="number" min="20" max="300" step="1" value="120" inputmode="numeric" aria-label="템포 (BPM)">
+        <button class="nudge" type="button" data-step="1" aria-label="1 BPM 빠르게">+1</button>
+        <button class="nudge" type="button" data-step="5" aria-label="5 BPM 빠르게">+5</button>
+      </div>
+      <div class="unit">BPM</div>
+      <div class="slider-wrap">
+        <input id="bpmSlider" type="range" min="20" max="300" step="1" value="120" aria-label="템포 슬라이더">
+        <div class="slider-scale" aria-hidden="true"><span>20</span><span>60</span><span>120</span><span>180</span><span>240</span><span>300</span></div>
+      </div>
+    </div>
+
+    <div class="controls">
+      <button id="tap" class="btn" type="button">탭 템포</button>
+      <button id="play" class="btn primary" type="button" aria-pressed="false">
+        <svg viewBox="0 0 16 16" aria-hidden="true"><path id="playIcon" d="M4 2.5v11l9-5.5z"></path></svg>
+        <span id="playLabel">시작</span>
+      </button>
+    </div>
+    <div class="tap-hint" id="tapHint" aria-live="polite"></div>
+
+    <div class="settings">
+      <div class="field">
+        <span class="label" id="meterLabel">박자</span>
+        <div class="chips" id="meters" role="group" aria-labelledby="meterLabel"></div>
+      </div>
+      <div class="field">
+        <span class="label" id="subLabel">박 세분화 <span class="label-note" id="subNote"></span></span>
+        <div class="chips" id="subdivs" style="--cols: 5" role="group" aria-labelledby="subLabel"></div>
+      </div>
+      <div class="field">
+        <span class="label">소리</span>
+        <div class="sound-row">
+          <button id="sound" class="toggle" type="button" aria-pressed="true">
+            <span class="knob"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M2 6h3l4-3.5v11L5 10H2z M11 5.2a4 4 0 0 1 0 5.6l-.8-.8a2.9 2.9 0 0 0 0-4z"></path></svg></span>
+            <span id="soundLabel">켜짐</span>
+          </button>
+          <input id="volume" type="range" min="0" max="100" step="1" value="80" aria-label="볼륨">
+        </div>
+        <div class="chips" id="voices" style="--cols: 5" role="group" aria-label="클릭음 종류"></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="panel" aria-labelledby="trainerTitle">
+    <div class="panel-head">
+      <h2 id="trainerTitle">스피드 트레이너</h2>
+      <button id="trainerToggle" class="toggle" type="button" aria-pressed="false" aria-labelledby="trainerTitle trainerLabel">
+        <span class="knob"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 2l5 6h-3v6H6V8H3z"></path></svg></span>
+        <span id="trainerLabel">꺼짐</span>
+      </button>
+    </div>
+    <div class="num-grid">
+      <label class="num-field"><span class="label">시작 BPM</span><input id="trStart" type="number" min="20" max="300" step="1" inputmode="numeric"></label>
+      <label class="num-field"><span class="label">목표 BPM</span><input id="trTarget" type="number" min="20" max="300" step="1" inputmode="numeric"></label>
+      <label class="num-field"><span class="label">한 번에 바꿀 BPM</span><input id="trStep" type="number" min="1" max="50" step="1" inputmode="numeric"></label>
+      <label class="num-field"><span class="label">몇 마디마다</span><input id="trBars" type="number" min="1" max="64" step="1" inputmode="numeric"></label>
+    </div>
+    <p class="status" id="trainerStatus" aria-live="polite"></p>
+  </section>
+
+  <section class="panel" aria-labelledby="presetTitle">
+    <h2 id="presetTitle">프리셋</h2>
+    <form id="presetForm" class="preset-form">
+      <input id="presetName" class="text-input" type="text" maxlength="40" placeholder="곡 이름 (예: 캐논 변주 연습)" aria-label="프리셋 이름">
+      <button class="btn small" type="submit">현재 설정 저장</button>
+    </form>
+    <ul id="presetList" class="preset-list"></ul>
+    <p class="status" id="presetStatus" aria-live="polite"></p>
+  </section>
+
+  <p class="keys">
+    <kbd>Space</kbd> 시작/정지 · <kbd>T</kbd> 탭 템포 · <kbd>↑</kbd><kbd>↓</kbd> ±1 · <kbd>Shift</kbd>+<kbd>↑</kbd><kbd>↓</kbd> ±5
+  </p>
+</main>
+
+<div id="editor" class="editor" role="dialog" aria-modal="true" aria-labelledby="editorTitle" hidden>
+  <div class="editor-bar">
+    <button id="editorClose" class="icon-btn" type="button" aria-label="편집 닫기">
+      <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3.5 2.1 8 6.6l4.5-4.5 1.4 1.4L9.4 8l4.5 4.5-1.4 1.4L8 9.4l-4.5 4.5-1.4-1.4L6.6 8 2.1 3.5z"></path></svg>
+    </button>
+    <div class="editor-title">
+      <h2 id="editorTitle">소리 패턴</h2>
+      <span id="editorMeta"></span>
+    </div>
+    <button id="editorReset" class="btn small" type="button">기본값으로</button>
+  </div>
+  <div class="editor-body">
+    <div class="editor-inner">
+      <div class="row-legend">
+        <span><i style="background: var(--row-a)"></i><b>A</b> 강세</span>
+        <span><i style="background: var(--row-b)"></i><b>B</b> 5도</span>
+        <span><i style="background: var(--row-c)"></i><b>C</b> 3도</span>
+      </div>
+      <div id="editLines" class="edit-lines"></div>
+      <p class="editor-note">칸을 누르면 켜지고 꺼집니다. 한 세로줄에서 여러 행을 켜면 동시에 울리고, 모두 끄면 그 클릭은 쉽니다.</p>
+    </div>
+  </div>
+  <div class="editor-foot">
+    <div class="editor-bpm">
+      <button class="nudge" type="button" data-step="-1" aria-label="1 BPM 느리게">−1</button>
+      <b id="editorBpm">120</b><small>BPM</small>
+      <button class="nudge" type="button" data-step="1" aria-label="1 BPM 빠르게">+1</button>
+    </div>
+    <button id="editorPlay" class="btn primary" type="button" aria-pressed="false">
+      <svg viewBox="0 0 16 16" aria-hidden="true"><path id="editorPlayIcon" d="M4 2.5v11l9-5.5z"></path></svg>
+      <span id="editorPlayLabel">시작</span>
+    </button>
+  </div>
+</div>
+
+<script>
+(() => {
+  const MIN_BPM = 20, MAX_BPM = 300;
+  const METERS = [
+    { n: 2, d: 4 }, { n: 3, d: 4 }, { n: 4, d: 4 }, { n: 5, d: 4 },
+    { n: 6, d: 8 }, { n: 7, d: 8 }, { n: 12, d: 8 }
+  ];
+  const MARKINGS = [
+    [40, "Grave", "아주 느리고 장중하게"],
+    [60, "Largo", "아주 느리게"],
+    [66, "Larghetto", "조금 느리게"],
+    [76, "Adagio", "느리게"],
+    [108, "Andante", "걷는 빠르기로"],
+    [120, "Moderato", "보통 빠르기로"],
+    [156, "Allegro", "빠르게"],
+    [176, "Vivace", "생기 있게"],
+    [200, "Presto", "매우 빠르게"],
+    [Infinity, "Prestissimo", "가능한 한 빠르게"]
+  ];
+  const SUBDIVS = [1, 2, 3, 4, 6];
+  const SUBDIV_NAMES = {
+    4: { 1: "4분음표", 2: "8분음표", 3: "8분음표 셋잇단", 4: "16분음표", 6: "16분음표 여섯잇단" },
+    8: { 1: "8분음표", 2: "16분음표", 3: "16분음표 셋잇단", 4: "32분음표", 6: "32분음표 여섯잇단" }
+  };
+  // Grid rows; each grid column stores a bitmask of the rows that sound on that click.
+  const ROWS = [
+    { letter: "A", name: "강세", level: "accent" },
+    { letter: "B", name: "5도", level: "fifth" },
+    { letter: "C", name: "3도", level: "third" }
+  ];
+  const VOICE_NAMES = { click: "클릭", wood: "우드블록", cowbell: "카우벨", hihat: "하이햇", beep: "전자음" };
+  const STORE_KEY = "pendulum-metronome";
+  const LOOKAHEAD = 0.12;
+
+  const $ = (id) => document.getElementById(id);
+  const el = {
+    bpm: $("bpm"), slider: $("bpmSlider"), mm: $("mmBpm"), marking: $("marking"),
+    play: $("play"), playLabel: $("playLabel"), playIcon: $("playIcon"),
+    tap: $("tap"), tapHint: $("tapHint"), meters: $("meters"),
+    subdivs: $("subdivs"), subNote: $("subNote"), voices: $("voices"),
+    trToggle: $("trainerToggle"), trLabel: $("trainerLabel"), trStatus: $("trainerStatus"),
+    trStart: $("trStart"), trTarget: $("trTarget"), trStep: $("trStep"), trBars: $("trBars"),
+    presetForm: $("presetForm"), presetName: $("presetName"), presetList: $("presetList"), presetStatus: $("presetStatus"),
+    sound: $("sound"), soundLabel: $("soundLabel"), volume: $("volume"),
+    miniGrid: $("miniGrid"), miniBeats: $("miniBeats"),
+    editor: $("editor"), editorClose: $("editorClose"), editorReset: $("editorReset"), editorMeta: $("editorMeta"),
+    editLines: $("editLines"), editorBpm: $("editorBpm"),
+    editorPlay: $("editorPlay"), editorPlayIcon: $("editorPlayIcon"), editorPlayLabel: $("editorPlayLabel")
+  };
+
+  const TRAINER_LIMITS = { start: [MIN_BPM, MAX_BPM], target: [MIN_BPM, MAX_BPM], step: [1, 50], bars: [1, 64] };
+  const state = {
+    bpm: 120, meter: 2, subdiv: 1, sound: true, volume: 80, voice: "click",
+    trainer: { on: false, start: 80, target: 120, step: 4, bars: 4 },
+    grids: {}
+  };
+  const clampInt = (v, [lo, hi]) => Math.min(hi, Math.max(lo, Math.round(v)));
+  try {
+    const saved = JSON.parse(localStorage.getItem(STORE_KEY) || "{}");
+    if (saved.grids && typeof saved.grids === "object") {
+      for (const [k, g] of Object.entries(saved.grids)) {
+        const [mi, sub] = k.split(":").map(Number);
+        const valid = METERS[mi] && SUBDIVS.includes(sub) && Array.isArray(g)
+          && g.length === METERS[mi].n * sub && g.every((v) => Number.isInteger(v) && v >= 0 && v < 8);
+        if (valid) state.grids[k] = g;
+      }
+    }
+    if (saved.trainer && typeof saved.trainer === "object") {
+      state.trainer.on = saved.trainer.on === true;
+      for (const k of Object.keys(TRAINER_LIMITS)) {
+        if (Number.isFinite(saved.trainer[k])) state.trainer[k] = clampInt(saved.trainer[k], TRAINER_LIMITS[k]);
+      }
+    }
+    if (Number.isFinite(saved.bpm)) state.bpm = clampBpm(saved.bpm);
+    if (Number.isInteger(saved.meter) && METERS[saved.meter]) state.meter = saved.meter;
+    if (SUBDIVS.includes(saved.subdiv)) state.subdiv = saved.subdiv;
+    if (VOICE_NAMES[saved.voice]) state.voice = saved.voice;
+    if (typeof saved.sound === "boolean") state.sound = saved.sound;
+    if (Number.isFinite(saved.volume)) state.volume = Math.min(100, Math.max(0, saved.volume));
+  } catch (_) {}
+
+  const PRESET_KEY = "pendulum-metronome-presets";
+  const EXAMPLE_PRESETS = [
+    { name: "예시 · 스케일 연습", bpm: 72, meter: 2, subdiv: 4, voice: "click", grid: null },
+    { name: "예시 · 왈츠", bpm: 138, meter: 1, subdiv: 1, voice: "wood", grid: null },
+    { name: "예시 · 6/8 발라드", bpm: 126, meter: 4, subdiv: 1, voice: "hihat", grid: null },
+    { name: "예시 · 셔플", bpm: 96, meter: 2, subdiv: 3, voice: "click", grid: [1, 0, 4, 2, 0, 4, 2, 0, 4, 2, 0, 4] }
+  ];
+  function isValidGrid(g, len) {
+    return Array.isArray(g) && g.length === len && g.every((v) => Number.isInteger(v) && v >= 0 && v < 8);
+  }
+  // grid: undefined = saved before patterns existed (leave grid alone), null = default pattern.
+  const isPreset = (p) => p && typeof p.name === "string" && Number.isFinite(p.bpm)
+    && METERS[p.meter] && SUBDIVS.includes(p.subdiv) && VOICE_NAMES[p.voice]
+    && (p.grid == null || isValidGrid(p.grid, METERS[p.meter].n * p.subdiv));
+  let presets = EXAMPLE_PRESETS.slice();
+  try {
+    const raw = localStorage.getItem(PRESET_KEY);
+    if (raw !== null) presets = JSON.parse(raw).filter(isPreset);
+  } catch (_) {}
+
+  function save() {
+    try { localStorage.setItem(STORE_KEY, JSON.stringify(state)); } catch (_) {}
+    markActivePreset();
+  }
+  function clampBpm(v) { return Math.min(MAX_BPM, Math.max(MIN_BPM, Math.round(v))); }
+
+  function renderTempo() {
+    el.bpm.value = state.bpm;
+    el.slider.value = state.bpm;
+    el.mm.textContent = state.bpm;
+    el.editorBpm.textContent = state.bpm;
+    const m = MARKINGS.find(([limit]) => state.bpm < limit);
+    el.marking.innerHTML = "";
+    el.marking.append(m[1]);
+    const gloss = document.createElement("span");
+    gloss.textContent = m[2];
+    el.marking.append(gloss);
+  }
+
+  function setBpm(v) {
+    if (!Number.isFinite(v)) { renderTempo(); return; }
+    state.bpm = clampBpm(v);
+    renderTempo();
+    save();
+  }
+
+  function renderMeters() {
+    el.meters.innerHTML = "";
+    METERS.forEach((m, i) => {
+      const b = document.createElement("button");
+      b.type = "button";
+      b.className = "chip";
+      b.textContent = `${m.n}/${m.d}`;
+      b.setAttribute("aria-pressed", String(i === state.meter));
+      b.addEventListener("click", () => setMeter(i));
+      el.meters.appendChild(b);
+    });
+    renderGrids();
+  }
+
+  // ---- Sound pattern grid ----
+  const gridKey = (meter, sub) => `${meter}:${sub}`;
+  function defaultGrid(n, sub) {
+    // Downbeat on A, other beats on B, subdivision clicks on C.
+    return Array.from({ length: n * sub }, (_, j) => (j % sub ? 4 : j === 0 ? 1 : 2));
+  }
+  function gridFor(meter, sub) {
+    return state.grids[gridKey(meter, sub)] || defaultGrid(METERS[meter].n, sub);
+  }
+
+  let miniCells = [], editCells = [], nowCol = -1;
+
+  function paintColumn(col) {
+    const mask = gridFor(state.meter, state.subdiv)[col];
+    const sub = state.subdiv;
+    ROWS.forEach((row, r) => {
+      const on = (mask & (1 << r)) !== 0;
+      if (miniCells[col]) miniCells[col][r].classList.toggle("on", on);
+      const c = editCells[col] && editCells[col][r];
+      if (c) {
+        c.classList.toggle("on", on);
+        c.setAttribute("aria-pressed", String(on));
+        c.setAttribute("aria-label", `${Math.floor(col / sub) + 1}박 ${col % sub + 1}번째 클릭, ${row.letter} ${row.name}`);
+      }
+    });
+  }
+
+  function setNow(col) {
+    for (const cells of [miniCells[nowCol], editCells[nowCol]]) cells && cells.forEach((c) => c.classList.remove("now"));
+    nowCol = col;
+    for (const cells of [miniCells[col], editCells[col]]) cells && cells.forEach((c) => c.classList.add("now"));
+  }
+
+  function renderMini() {
+    const n = METERS[state.meter].n, sub = state.subdiv, total = n * sub;
+    const gap = total > 24 ? 1 : 2, groupGap = total > 24 ? 3 : 6;
+    const width = el.miniGrid.clientWidth - 20;
+    const cellW = Math.max(3, Math.min(18, Math.floor((width - (n - 1) * groupGap - n * (sub - 1) * gap) / total)));
+    el.miniBeats.style.setProperty("--cell-w", `${cellW}px`);
+    el.miniBeats.style.setProperty("--cell-h", `${Math.max(10, Math.min(cellW, 18))}px`);
+    el.miniBeats.style.setProperty("--cell-gap", `${gap}px`);
+    el.miniBeats.style.setProperty("--group-gap", `${groupGap}px`);
+    el.miniBeats.innerHTML = "";
+    miniCells = [];
+    for (let b = 0; b < n; b++) {
+      const block = document.createElement("span");
+      block.className = "mini-beat";
+      block.style.setProperty("--sub", sub);
+      for (let k = 0; k < sub; k++) {
+        miniCells.push(ROWS.map((_, r) => {
+          const c = document.createElement("span");
+          c.className = "mcell";
+          c.dataset.row = r;
+          block.appendChild(c);
+          return c;
+        }));
+      }
+      el.miniBeats.appendChild(block);
+    }
+  }
+
+  function renderEditor() {
+    const m = METERS[state.meter], n = m.n, sub = state.subdiv;
+    el.editorMeta.textContent = `${m.n}/${m.d} · 박당 ${sub}클릭`;
+    const gap = 4, blockGap = 12, labelW = 16;
+    const width = el.editLines.clientWidth;
+    // Fit as many beats per line as keeps cells comfortably tappable.
+    let perLine = 1, cell = 34;
+    for (let bp = n; bp >= 1; bp--) {
+      const c = Math.floor((width - labelW - bp * blockGap - bp * (sub - 1) * gap) / (bp * sub));
+      if (c >= 34 || bp === 1) { perLine = bp; cell = Math.max(28, Math.min(56, c)); break; }
+    }
+    el.editLines.style.setProperty("--cell", `${cell}px`);
+    el.editLines.style.setProperty("--cell-gap", `${gap}px`);
+    el.editLines.style.setProperty("--block-gap", `${blockGap}px`);
+    el.editLines.innerHTML = "";
+    editCells = [];
+    for (let start = 0; start < n; start += perLine) {
+      const line = document.createElement("div");
+      line.className = "edit-line";
+      const labels = document.createElement("div");
+      labels.className = "row-labels";
+      labels.setAttribute("aria-hidden", "true");
+      labels.appendChild(document.createElement("span"));
+      ROWS.forEach((row) => {
+        const s = document.createElement("span");
+        s.textContent = row.letter;
+        labels.appendChild(s);
+      });
+      line.appendChild(labels);
+      for (let b = start; b < Math.min(n, start + perLine); b++) {
+        const block = document.createElement("div");
+        block.className = "beat-block";
+        block.style.setProperty("--sub", sub);
+        const num = document.createElement("div");
+        num.className = "beat-num";
+        num.textContent = b + 1;
+        block.appendChild(num);
+        for (let k = 0; k < sub; k++) {
+          const col = b * sub + k;
+          editCells[col] = ROWS.map((_, r) => {
+            const c = document.createElement("button");
+            c.type = "button";
+            c.className = "cell";
+            c.dataset.row = r;
+            c.addEventListener("click", () => toggleCell(col, r));
+            block.appendChild(c);
+            return c;
+          });
+        }
+        line.appendChild(block);
+      }
+      el.editLines.appendChild(line);
+    }
+  }
+
+  function renderGrids() {
+    renderMini();
+    if (!el.editor.hidden) renderEditor();
+    else editCells = [];
+    const total = METERS[state.meter].n * state.subdiv;
+    for (let col = 0; col < total; col++) paintColumn(col);
+    if (nowCol >= total) nowCol = -1;
+    if (nowCol >= 0) setNow(nowCol);
+  }
+
+  async function toggleCell(col, r) {
+    const key = gridKey(state.meter, state.subdiv);
+    const grid = gridFor(state.meter, state.subdiv).slice();
+    grid[col] ^= 1 << r;
+    state.grids[key] = grid;
+    paintColumn(col);
+    save();
+    if (playing || !state.sound || !(grid[col] & (1 << r))) return;
+    try { await ensureAudio(); } catch (_) { return; }
+    click(ctx.currentTime + 0.02, ROWS[r].level);
+  }
+
+  function resetGrid() {
+    delete state.grids[gridKey(state.meter, state.subdiv)];
+    const total = METERS[state.meter].n * state.subdiv;
+    for (let col = 0; col < total; col++) paintColumn(col);
+    save();
+  }
+
+  function openEditor() {
+    el.editor.hidden = false;
+    document.body.style.overflow = "hidden";
+    renderGrids();
+    el.editorClose.focus();
+  }
+
+  function closeEditor() {
+    el.editor.hidden = true;
+    document.body.style.overflow = "";
+    renderGrids();
+    el.miniGrid.focus();
+  }
+
+  function setMeter(i) {
+    state.meter = i;
+    renderMeters();
+    renderSubdivs();
+    save();
+    if (playing) beatIdx = 0;
+  }
+
+  function renderSubdivs() {
+    el.subdivs.innerHTML = "";
+    SUBDIVS.forEach((n) => {
+      const b = document.createElement("button");
+      b.type = "button";
+      b.className = "chip";
+      b.textContent = n === 1 ? "없음" : String(n);
+      b.setAttribute("aria-label", n === 1 ? "세분화 없음" : `박당 ${n}클릭`);
+      b.setAttribute("aria-pressed", String(n === state.subdiv));
+      b.addEventListener("click", () => setSubdiv(n));
+      el.subdivs.appendChild(b);
+    });
+    const name = SUBDIV_NAMES[METERS[state.meter].d][state.subdiv];
+    el.subNote.textContent = state.subdiv === 1 ? name : `박당 ${state.subdiv}클릭 · ${name}`;
+  }
+
+  function setSubdiv(n) {
+    state.subdiv = n;
+    renderSubdivs();
+    renderGrids();
+    save();
+  }
+
+  function renderSound() {
+    el.sound.setAttribute("aria-pressed", String(state.sound));
+    el.soundLabel.textContent = state.sound ? "켜짐" : "꺼짐";
+    el.volume.value = state.volume;
+    el.volume.disabled = !state.sound;
+    applyVolume();
+    el.voices.innerHTML = "";
+    Object.entries(VOICE_NAMES).forEach(([key, name]) => {
+      const b = document.createElement("button");
+      b.type = "button";
+      b.className = "chip word";
+      b.textContent = name;
+      b.setAttribute("aria-pressed", String(key === state.voice));
+      b.addEventListener("click", () => setVoice(key));
+      el.voices.appendChild(b);
+    });
+  }
+
+  async function setVoice(key) {
+    state.voice = key;
+    renderSound();
+    save();
+    if (playing || !state.sound) return;
+    try { await ensureAudio(); } catch (_) { return; }
+    click(ctx.currentTime + 0.02, "accent");
+  }
+
+  // ---- Audio: Web Audio lookahead scheduler ----
+  let ctx = null, master = null;
+  function applyVolume() {
+    if (!master) return;
+    const v = state.sound ? Math.pow(state.volume / 100, 1.6) : 0;
+    master.gain.setTargetAtTime(v, ctx.currentTime, 0.01);
+  }
+  async function ensureAudio() {
+    if (!ctx) {
+      ctx = new (window.AudioContext || window.webkitAudioContext)();
+      master = ctx.createGain();
+      master.connect(ctx.destination);
+      applyVolume();
+    }
+    if (ctx.state !== "running") await ctx.resume();
+  }
+
+  // [pitch multiplier, peak gain] per click role
+  const LEVELS = {
+    accent: [2, 1],
+    fifth: [Math.pow(2, 7 / 12), 0.62],
+    third: [Math.pow(2, 4 / 12), 0.62]
+  };
+
+  function envelope(time, peak, decay) {
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0.0001, time);
+    g.gain.exponentialRampToValueAtTime(peak, time + 0.0015);
+    g.gain.exponentialRampToValueAtTime(0.0001, time + decay);
+    g.connect(master);
+    return g;
+  }
+  function tone(type, freq, time, dest, len) {
+    const osc = ctx.createOscillator();
+    osc.type = type;
+    osc.frequency.setValueAtTime(freq, time);
+    osc.connect(dest);
+    osc.start(time);
+    osc.stop(time + len);
+    return osc;
+  }
+  let noiseBuf = null;
+  function noise(time, dest, len) {
+    if (!noiseBuf) {
+      noiseBuf = ctx.createBuffer(1, Math.floor(ctx.sampleRate * 0.25), ctx.sampleRate);
+      const d = noiseBuf.getChannelData(0);
+      for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
+    }
+    const src = ctx.createBufferSource();
+    src.buffer = noiseBuf;
+    src.connect(dest);
+    src.start(time);
+    src.stop(time + len);
+  }
+
+  const VOICES = {
+    click(time, p, peak) {
+      tone("triangle", 1175 * p, time, envelope(time, peak, 0.055), 0.07);
+    },
+    wood(time, p, peak) {
+      const g = envelope(time, peak * 0.7, 0.045);
+      const osc = tone("sine", 1250 * p, time, g, 0.06);
+      osc.frequency.exponentialRampToValueAtTime(900 * p, time + 0.012);
+      tone("sine", 2480 * p, time, envelope(time, peak * 0.25, 0.02), 0.03);
+    },
+    cowbell(time, p, peak) {
+      const bp = ctx.createBiquadFilter();
+      bp.type = "bandpass";
+      bp.frequency.value = 2400 * p;
+      bp.Q.value = 1.2;
+      bp.connect(envelope(time, peak * 0.6, 0.2));
+      tone("square", 540 * p, time, bp, 0.22);
+      tone("square", 800 * p, time, bp, 0.22);
+    },
+    hihat(time, p, peak, accent) {
+      const hp = ctx.createBiquadFilter();
+      hp.type = "highpass";
+      hp.frequency.value = Math.min(6500 * p, 16000);
+      hp.connect(envelope(time, peak * 0.85, accent ? 0.12 : 0.05));
+      noise(time, hp, 0.14);
+    },
+    beep(time, p, peak) {
+      const g = ctx.createGain();
+      g.gain.setValueAtTime(0, time);
+      g.gain.linearRampToValueAtTime(peak * 0.7, time + 0.003);
+      g.gain.setValueAtTime(peak * 0.7, time + 0.05);
+      g.gain.linearRampToValueAtTime(0, time + 0.07);
+      g.connect(master);
+      tone("sine", 880 * p, time, g, 0.08);
+    }
+  };
+
+  function click(time, level, scale = 1) {
+    const [p, peak] = LEVELS[level];
+    VOICES[state.voice](time, p, peak * scale, level === "accent");
+  }
+
+  function playColumn(time, mask) {
+    const levels = ROWS.filter((_, r) => mask & (1 << r)).map((row) => row.level);
+    // Scale stacked sounds so a full column stays below clipping.
+    levels.forEach((level) => click(time, level, 1 / levels.length));
+  }
+
+  let playing = false, nextTime = 0, beatIdx = 0, subIdx = 0, seq = 0;
+  let curBeat = 0, curSub = 1, curBeatDur = 0.5, curMeter = 0;
+  const queue = [];
+
+  // Tempo, meter and subdivision changes take effect at the next beat boundary;
+  // grid edits apply from the very next click.
+  function schedule() {
+    if (!playing) return;
+    while (nextTime < ctx.currentTime + LOOKAHEAD) {
+      if (subIdx === 0) {
+        curMeter = state.meter;
+        curBeat = beatIdx % METERS[curMeter].n;
+        if (curBeat === 0 && seq > 0) onBarStart();
+        curSub = state.subdiv;
+        curBeatDur = 60 / state.bpm;
+        seq++;
+      }
+      const col = curBeat * curSub + subIdx;
+      if (state.sound) playColumn(nextTime, gridFor(curMeter, curSub)[col]);
+      queue.push({ time: nextTime, col, meter: curMeter, sub: curSub });
+      nextTime += curBeatDur / curSub;
+      if (++subIdx >= curSub) { subIdx = 0; beatIdx = curBeat + 1; }
+    }
+  }
+
+  // Worker-driven ticks keep time when the tab is in the background.
+  const ticker = (() => {
+    let intervalId = null, worker = null;
+    const fallback = {
+      start() { clearInterval(intervalId); intervalId = setInterval(schedule, 25); },
+      stop() { clearInterval(intervalId); intervalId = null; }
+    };
+    try {
+      const src = "let id=null;onmessage=e=>{clearInterval(id);if(e.data==='start')id=setInterval(()=>postMessage(0),25);};";
+      worker = new Worker(URL.createObjectURL(new Blob([src], { type: "text/javascript" })));
+      worker.onmessage = schedule;
+    } catch (_) { worker = null; }
+    let useWorker = !!worker;
+    if (worker) {
+      worker.onerror = () => {
+        useWorker = false;
+        if (playing) fallback.start();
+      };
+    }
+    return {
+      start() { useWorker ? worker.postMessage("start") : fallback.start(); },
+      stop() { if (worker) worker.postMessage("stop"); fallback.stop(); }
+    };
+  })();
+
+  let current = null;
+  function draw() {
+    if (!playing) return;
+    const now = ctx.currentTime - (ctx.outputLatency || ctx.baseLatency || 0);
+    let changed = false;
+    while (queue.length && queue[0].time <= now) { current = queue.shift(); changed = true; }
+    if (changed) {
+      const shown = current.meter === state.meter && current.sub === state.subdiv;
+      setNow(shown ? current.col : -1);
+    }
+    requestAnimationFrame(draw);
+  }
+
+  // ---- Speed trainer ----
+  let barsDone = 0;
+  function onBarStart() {
+    const tr = state.trainer;
+    if (!tr.on) return;
+    barsDone++;
+    if (barsDone % tr.bars === 0 && state.bpm !== tr.target) {
+      const dir = Math.sign(tr.target - state.bpm);
+      const next = state.bpm + dir * tr.step;
+      setBpm(dir > 0 ? Math.min(next, tr.target) : Math.max(next, tr.target));
+    }
+    renderTrainerStatus();
+  }
+
+  function renderTrainerStatus() {
+    const tr = state.trainer;
+    el.trStatus.innerHTML = "";
+    const b = (text) => { const x = document.createElement("b"); x.textContent = text; return x; };
+    if (!tr.on) {
+      el.trStatus.append("켜면 시작 버튼을 누를 때마다 시작 BPM에서 다시 출발합니다.");
+      return;
+    }
+    const up = tr.target >= tr.start;
+    if (!playing) {
+      el.trStatus.append(b(`${tr.start}`), ` BPM에서 ${tr.bars}마디마다 ${tr.step} BPM씩 ${up ? "올려" : "내려"} `, b(`${tr.target}`), " BPM까지 갑니다.");
+    } else if (state.bpm === tr.target) {
+      el.trStatus.append("목표 ", b(`${tr.target}`), " BPM에 도달했습니다. 이 템포를 유지합니다.");
+    } else {
+      const left = tr.bars - (barsDone % tr.bars);
+      el.trStatus.append("지금 ", b(`${state.bpm}`), ` BPM · 목표 ${tr.target} · 다음 변경까지 `, b(`${left}`), "마디");
+    }
+  }
+
+  function renderTrainer() {
+    const tr = state.trainer;
+    el.trToggle.setAttribute("aria-pressed", String(tr.on));
+    el.trLabel.textContent = tr.on ? "켜짐" : "꺼짐";
+    el.trStart.value = tr.start;
+    el.trTarget.value = tr.target;
+    el.trStep.value = tr.step;
+    el.trBars.value = tr.bars;
+    renderTrainerStatus();
+  }
+
+  async function start() {
+    try {
+      await ensureAudio();
+    } catch (_) {
+      el.tapHint.textContent = "이 브라우저에서는 오디오를 시작할 수 없습니다.";
+      return;
+    }
+    barsDone = 0;
+    if (state.trainer.on) setBpm(state.trainer.start);
+    playing = true;
+    beatIdx = 0; subIdx = 0; seq = 0; current = null; queue.length = 0;
+    nextTime = ctx.currentTime + 0.06;
+    schedule();
+    ticker.start();
+    renderPlay();
+    requestAnimationFrame(draw);
+    renderTrainerStatus();
+  }
+
+  function stop() {
+    playing = false;
+    ticker.stop();
+    queue.length = 0;
+    current = null;
+    setNow(-1);
+    renderPlay();
+    renderTrainerStatus();
+  }
+
+  function toggle() { playing ? stop() : start(); }
+
+  function renderPlay() {
+    const icon = playing ? "M3 3h10v10H3z" : "M4 2.5v11l9-5.5z";
+    for (const [btn, label, path] of [[el.play, el.playLabel, el.playIcon], [el.editorPlay, el.editorPlayLabel, el.editorPlayIcon]]) {
+      btn.setAttribute("aria-pressed", String(playing));
+      label.textContent = playing ? "정지" : "시작";
+      path.setAttribute("d", icon);
+    }
+  }
+
+  // ---- Tap tempo ----
+  let taps = [], tapFlash = null;
+  function tap() {
+    const t = performance.now();
+    if (taps.length && t - taps[taps.length - 1] > 2000) taps = [];
+    taps.push(t);
+    if (taps.length > 8) taps.shift();
+    if (taps.length >= 2) {
+      const avg = (taps[taps.length - 1] - taps[0]) / (taps.length - 1);
+      setBpm(60000 / avg);
+      el.tapHint.textContent = `탭 ${taps.length}회 평균 → ${state.bpm} BPM`;
+    } else {
+      el.tapHint.textContent = "박자에 맞춰 계속 두드리세요";
+    }
+    el.tap.classList.add("hit");
+    clearTimeout(tapFlash);
+    tapFlash = setTimeout(() => el.tap.classList.remove("hit"), 90);
+  }
+
+  // ---- Presets ----
+  const sameGrid = (a, b) => a.length === b.length && a.every((v, i) => v === b[i]);
+  const matchesState = (p) => p.bpm === state.bpm && p.meter === state.meter
+    && p.subdiv === state.subdiv && p.voice === state.voice
+    && (p.grid === undefined
+      || sameGrid(p.grid || defaultGrid(METERS[p.meter].n, p.subdiv), gridFor(state.meter, state.subdiv)));
+
+  function presetMeta(p) {
+    const m = METERS[p.meter];
+    const parts = [`${p.bpm} BPM`, `${m.n}/${m.d}`];
+    if (p.subdiv > 1) parts.push(`박당 ${p.subdiv}클릭`);
+    parts.push(VOICE_NAMES[p.voice]);
+    if (p.grid && !sameGrid(p.grid, defaultGrid(m.n, p.subdiv))) parts.push("사용자 패턴");
+    return parts.join(" · ");
+  }
+
+  function storePresets() {
+    try {
+      localStorage.setItem(PRESET_KEY, JSON.stringify(presets));
+      return true;
+    } catch (_) {
+      el.presetStatus.textContent = "이 브라우저에서는 프리셋을 저장할 수 없어서, 창을 닫으면 사라집니다.";
+      return false;
+    }
+  }
+
+  function markActivePreset() {
+    [...el.presetList.children].forEach((li, i) => {
+      if (presets[i]) li.classList.toggle("active", matchesState(presets[i]));
+    });
+  }
+
+  function renderPresets() {
+    el.presetList.innerHTML = "";
+    if (!presets.length) {
+      const li = document.createElement("li");
+      li.className = "empty";
+      li.textContent = "저장된 프리셋이 없습니다. 위에서 이름을 입력하고 현재 설정을 저장하세요.";
+      el.presetList.appendChild(li);
+      return;
+    }
+    presets.forEach((p, i) => {
+      const li = document.createElement("li");
+      const load = document.createElement("button");
+      load.type = "button";
+      load.className = "preset-load";
+      const name = document.createElement("span");
+      name.className = "name";
+      name.textContent = p.name;
+      const meta = document.createElement("span");
+      meta.className = "meta";
+      meta.textContent = presetMeta(p);
+      load.append(name, meta);
+      load.addEventListener("click", () => loadPreset(i));
+
+      const del = document.createElement("button");
+      del.type = "button";
+      del.className = "preset-del";
+      del.textContent = "삭제";
+      del.setAttribute("aria-label", `${p.name} 삭제`);
+      let armed = null;
+      del.addEventListener("click", () => {
+        if (armed) { clearTimeout(armed); deletePreset(i); return; }
+        del.classList.add("confirm");
+        del.textContent = "삭제 확인";
+        armed = setTimeout(() => {
+          armed = null;
+          del.classList.remove("confirm");
+          del.textContent = "삭제";
+        }, 3000);
+      });
+      li.append(load, del);
+      el.presetList.appendChild(li);
+    });
+    markActivePreset();
+  }
+
+  function loadPreset(i) {
+    const p = presets[i];
+    setBpm(p.bpm);
+    state.subdiv = p.subdiv;
+    state.voice = p.voice;
+    if (p.grid !== undefined) {
+      const key = gridKey(p.meter, p.subdiv);
+      if (p.grid) state.grids[key] = p.grid.slice(); else delete state.grids[key];
+    }
+    setMeter(p.meter);
+    renderSound();
+    el.presetStatus.textContent = state.trainer.on
+      ? `‘${p.name}’ 프리셋을 불러왔습니다. 스피드 트레이너가 켜져 있어서 시작하면 트레이너 시작 BPM(${state.trainer.start})으로 바뀝니다.`
+      : `‘${p.name}’ 프리셋을 불러왔습니다.`;
+  }
+
+  function deletePreset(i) {
+    const [p] = presets.splice(i, 1);
+    renderPresets();
+    if (storePresets()) el.presetStatus.textContent = `‘${p.name}’ 프리셋을 삭제했습니다.`;
+  }
+
+  el.presetForm.addEventListener("submit", (e) => {
+    e.preventDefault();
+    const m = METERS[state.meter];
+    const name = el.presetName.value.trim() || `${state.bpm} BPM ${m.n}/${m.d}`;
+    const custom = state.grids[gridKey(state.meter, state.subdiv)];
+    const preset = {
+      name, bpm: state.bpm, meter: state.meter, subdiv: state.subdiv, voice: state.voice,
+      grid: custom ? custom.slice() : null
+    };
+    const existing = presets.findIndex((p) => p.name === name);
+    if (existing >= 0) presets[existing] = preset; else presets.push(preset);
+    renderPresets();
+    el.presetName.value = "";
+    if (storePresets()) {
+      el.presetStatus.textContent = existing >= 0 ? `‘${name}’ 프리셋을 현재 설정으로 덮어썼습니다.` : `‘${name}’ 프리셋을 저장했습니다.`;
+    }
+  });
+
+  // ---- Events ----
+  document.querySelectorAll(".nudge").forEach((b) =>
+    b.addEventListener("click", () => setBpm(state.bpm + Number(b.dataset.step))));
+  el.slider.addEventListener("input", () => setBpm(Number(el.slider.value)));
+  el.bpm.addEventListener("change", () => setBpm(Number(el.bpm.value)));
+  el.bpm.addEventListener("keydown", (e) => { if (e.key === "Enter") el.bpm.blur(); });
+  el.play.addEventListener("click", toggle);
+  el.editorPlay.addEventListener("click", toggle);
+  el.miniGrid.addEventListener("click", openEditor);
+  el.editorClose.addEventListener("click", closeEditor);
+  el.editorReset.addEventListener("click", resetGrid);
+  let resizeTimer = null;
+  window.addEventListener("resize", () => {
+    clearTimeout(resizeTimer);
+    resizeTimer = setTimeout(renderGrids, 100);
+  });
+  el.tap.addEventListener("click", tap);
+  el.sound.addEventListener("click", () => { state.sound = !state.sound; renderSound(); save(); });
+  el.volume.addEventListener("input", () => { state.volume = Number(el.volume.value); applyVolume(); save(); });
+  el.trToggle.addEventListener("click", () => {
+    state.trainer.on = !state.trainer.on;
+    barsDone = 0;
+    renderTrainer();
+    save();
+  });
+  [["trStart", "start"], ["trTarget", "target"], ["trStep", "step"], ["trBars", "bars"]].forEach(([id, key]) => {
+    el[id].addEventListener("change", () => {
+      const v = Number(el[id].value);
+      if (Number.isFinite(v) && el[id].value !== "") state.trainer[key] = clampInt(v, TRAINER_LIMITS[key]);
+      renderTrainer();
+      save();
+    });
+    el[id].addEventListener("keydown", (e) => { if (e.key === "Enter") el[id].blur(); });
+  });
+
+  document.addEventListener("keydown", (e) => {
+    if (e.ctrlKey || e.metaKey || e.altKey) return;
+    if (e.key === "Escape" && !el.editor.hidden) { e.preventDefault(); closeEditor(); return; }
+    const tag = e.target.tagName;
+    if (tag === "INPUT" || tag === "TEXTAREA") return;
+    const onButton = tag === "BUTTON";
+    if (e.code === "Space" && !onButton) { e.preventDefault(); toggle(); }
+    else if (e.key === "t" || e.key === "T") { e.preventDefault(); tap(); }
+    else if (e.key === "ArrowUp" || e.key === "ArrowRight") { e.preventDefault(); setBpm(state.bpm + (e.shiftKey ? 5 : 1)); }
+    else if (e.key === "ArrowDown" || e.key === "ArrowLeft") { e.preventDefault(); setBpm(state.bpm - (e.shiftKey ? 5 : 1)); }
+  });
+
+  renderTempo();
+  renderMeters();
+  renderSubdivs();
+  renderSound();
+  renderTrainer();
+  renderPresets();
+  renderPlay();
+})();
+</script>
+</body>
+</html>
