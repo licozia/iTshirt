@@ -189,15 +189,36 @@
   .slider-wrap { display: grid; gap: 4px; width: 100%; margin-top: 10px; }
   .slider-scale { display: flex; justify-content: space-between; font-family: var(--font-num); font-size: 13px; color: var(--muted); font-variant-numeric: tabular-nums; }
 
-  .beats { display: flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: 10px; min-height: 26px; }
-  .dot {
-    width: 16px; height: 16px; border-radius: 50%;
-    background: var(--beat-off);
-    transition: transform .08s ease-out, background-color .08s;
+  .beat-area { display: grid; gap: 8px; }
+  .beats {
+    display: grid;
+    grid-template-columns: repeat(var(--per-row, 4), minmax(0, 48px));
+    justify-content: center;
+    gap: 8px;
   }
-  .dot.down { width: 22px; height: 22px; box-shadow: inset 0 0 0 2px var(--accent); background: transparent; }
-  .dot.on { background: var(--beat-on); transform: scale(1.2); }
-  .dot.down.on { background: var(--accent); }
+  .dot {
+    width: 100%; max-width: 100%; aspect-ratio: 1;
+    padding: 0;
+    border-radius: 50%;
+    border: 2px solid var(--line);
+    background: transparent;
+    color: var(--muted);
+    display: grid; place-items: center;
+    font-family: var(--font-num);
+    font-size: 19px; font-weight: 600; line-height: 1;
+    transition: transform .08s ease-out, background-color .08s, border-color .08s;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .dot:hover { border-color: var(--muted); }
+  .dot[data-sound="accent"] { border: 3px solid var(--accent); color: var(--accent); }
+  .dot[data-sound="third"], .dot[data-sound="fifth"] { border-color: var(--beat-on); color: var(--ink); }
+  .dot[data-sound="mute"] { border-style: dashed; color: var(--muted); opacity: .6; }
+  .dot.on { background: var(--beat-on); border-color: var(--beat-on); color: var(--surface); transform: scale(1.08); }
+  .dot.on[data-sound="accent"] { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
+  .dot.on[data-sound="mute"] { background: var(--beat-off); border-color: var(--beat-off); color: var(--muted); }
+  .beat-legend { margin: 0; display: grid; justify-items: center; gap: 2px; text-align: center; font-size: 12px; color: var(--muted); }
+  .beat-legend span span { white-space: nowrap; }
+  .beat-legend b { font-family: var(--font-num); font-size: 14px; font-weight: 600; color: var(--ink); }
 
   .controls { display: grid; grid-template-columns: 1fr 1.6fr; gap: 10px; }
   .btn {
@@ -302,7 +323,13 @@
       </div>
     </div>
 
-    <div class="beats" id="beats" aria-hidden="true"></div>
+    <div class="beat-area">
+      <div class="beats" id="beats" role="group" aria-label="박마다 소리 바꾸기"></div>
+      <p class="beat-legend">
+        <span>동그라미를 누르면 소리가 바뀝니다</span>
+        <span><span><b>&gt;</b> 첫박</span> → <span>보통</span> → <span><b>3</b> 3도</span> → <span><b>5</b> 5도</span> → <span><b>×</b> 음소거</span></span>
+      </p>
+    </div>
 
     <div class="controls">
       <button id="tap" class="btn" type="button">탭 템포</button>
@@ -392,6 +419,9 @@
     4: { 1: "4분음표", 2: "8분음표", 3: "8분음표 셋잇단", 4: "16분음표", 6: "16분음표 여섯잇단" },
     8: { 1: "8분음표", 2: "16분음표", 3: "16분음표 셋잇단", 4: "32분음표", 6: "32분음표 여섯잇단" }
   };
+  const BEAT_SOUND_NAMES = { accent: "첫박 소리", beat: "보통", third: "3도 높은 음", fifth: "5도 높은 음", mute: "음소거" };
+  const BEAT_SOUND_ORDER = Object.keys(BEAT_SOUND_NAMES);
+  const BEAT_MARKS = { accent: ">", beat: "", third: "3", fifth: "5", mute: "×" };
   const VOICE_NAMES = { click: "클릭", wood: "우드블록", cowbell: "카우벨", hihat: "하이햇", beep: "전자음" };
   const STORE_KEY = "pendulum-metronome";
   const SWING_DEG = 26;
@@ -414,11 +444,18 @@
   const TRAINER_LIMITS = { start: [MIN_BPM, MAX_BPM], target: [MIN_BPM, MAX_BPM], step: [1, 50], bars: [1, 64] };
   const state = {
     bpm: 120, meter: 2, subdiv: 1, sound: true, volume: 80, voice: "click",
-    trainer: { on: false, start: 80, target: 120, step: 4, bars: 4 }
+    trainer: { on: false, start: 80, target: 120, step: 4, bars: 4 },
+    patterns: {}
   };
   const clampInt = (v, [lo, hi]) => Math.min(hi, Math.max(lo, Math.round(v)));
   try {
     const saved = JSON.parse(localStorage.getItem(STORE_KEY) || "{}");
+    if (saved.patterns && typeof saved.patterns === "object") {
+      for (const [k, p] of Object.entries(saved.patterns)) {
+        const m = METERS[k];
+        if (m && Array.isArray(p) && p.length === m.n && p.every((s) => BEAT_SOUND_NAMES[s])) state.patterns[k] = p;
+      }
+    }
     if (saved.trainer && typeof saved.trainer === "object") {
       state.trainer.on = saved.trainer.on === true;
       for (const k of Object.keys(TRAINER_LIMITS)) {
@@ -513,13 +550,46 @@
       b.addEventListener("click", () => setMeter(i));
       el.meters.appendChild(b);
     });
+    renderBeats();
+  }
+
+  function beatPattern() {
+    const n = METERS[state.meter].n;
+    return state.patterns[state.meter] || Array.from({ length: n }, (_, i) => (i === 0 ? "accent" : "beat"));
+  }
+
+  function paintDot(d, i, sound) {
+    d.dataset.sound = sound;
+    d.textContent = BEAT_MARKS[sound];
+    d.setAttribute("aria-label", `${i + 1}박: ${BEAT_SOUND_NAMES[sound]}. 눌러서 바꾸기`);
+  }
+
+  function renderBeats() {
+    const n = METERS[state.meter].n;
+    // Up to 7 per row; larger meters split into even rows (12/8 -> 6 + 6).
+    el.beats.style.setProperty("--per-row", n <= 7 ? n : Math.ceil(n / Math.ceil(n / 7)));
     el.beats.innerHTML = "";
-    dots = Array.from({ length: METERS[state.meter].n }, (_, i) => {
-      const d = document.createElement("span");
-      d.className = i === 0 ? "dot down" : "dot";
+    const pattern = beatPattern();
+    dots = pattern.map((sound, i) => {
+      const d = document.createElement("button");
+      d.type = "button";
+      d.className = "dot";
+      paintDot(d, i, sound);
+      d.addEventListener("click", () => cycleBeat(i));
       el.beats.appendChild(d);
       return d;
     });
+  }
+
+  async function cycleBeat(i) {
+    const pattern = beatPattern().slice();
+    pattern[i] = BEAT_SOUND_ORDER[(BEAT_SOUND_ORDER.indexOf(pattern[i]) + 1) % BEAT_SOUND_ORDER.length];
+    state.patterns[state.meter] = pattern;
+    paintDot(dots[i], i, pattern[i]);
+    save();
+    if (playing || !state.sound || pattern[i] === "mute") return;
+    try { await ensureAudio(); } catch (_) { return; }
+    click(ctx.currentTime + 0.02, pattern[i]);
   }
 
   function setMeter(i) {
@@ -597,7 +667,13 @@
   }
 
   // [pitch multiplier, peak gain] per click role
-  const LEVELS = { accent: [1.5, 1], beat: [1, 0.62], sub: [0.8, 0.3] };
+  const LEVELS = {
+    accent: [2, 1],
+    beat: [1, 0.62],
+    third: [Math.pow(2, 4 / 12), 0.62],
+    fifth: [Math.pow(2, 7 / 12), 0.62],
+    sub: [0.8, 0.3]
+  };
 
   function envelope(time, peak, decay) {
     const g = ctx.createGain();
@@ -652,8 +728,8 @@
     hihat(time, p, peak) {
       const hp = ctx.createBiquadFilter();
       hp.type = "highpass";
-      hp.frequency.value = 6500 * p;
-      hp.connect(envelope(time, peak * 0.85, p > 1 ? 0.12 : 0.05));
+      hp.frequency.value = Math.min(6500 * p, 16000);
+      hp.connect(envelope(time, peak * 0.85, peak === 1 ? 0.12 : 0.05));
       noise(time, hp, 0.14);
     },
     beep(time, p, peak) {
@@ -686,7 +762,8 @@
         if (curBeat === 0 && seq > 0) onBarStart();
         curSub = state.subdiv;
         curBeatDur = 60 / state.bpm;
-        if (state.sound) click(nextTime, curBeat === 0 && n > 1 ? "accent" : "beat");
+        const sound = beatPattern()[curBeat];
+        if (state.sound && sound !== "mute") click(nextTime, sound);
         queue.push({ time: nextTime, beat: curBeat, dur: curBeatDur, seq: seq++ });
       } else if (state.sound) {
         click(nextTime, "sub");
